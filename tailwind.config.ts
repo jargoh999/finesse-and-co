@@ -12,6 +12,12 @@ const config: Config = {
   ],
   theme: {
   	extend: {
+  		perspective: {
+        none: 'none',
+        250: '250px',
+        500: '500px',
+        1000: '1000px',
+      },
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',

@@ -1,9 +1,9 @@
 "use client"
-import { ShoppingCart } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { motion, useMotionValue, useTransform } from "framer-motion"
+import { ShoppingCart, ArrowRight } from "lucide-react"
+import { motion, useMotionValue, useTransform, AnimatePresence } from "framer-motion"
 import dynamic from 'next/dynamic'
 import { useRef, useEffect, useState } from 'react'
+import Link from 'next/link'
 
 // Dynamically import the PerfumeStack component with no SSR to avoid hydration issues
 const PerfumeStack = dynamic(() => import('@/components/PerfumeStack'), {
@@ -15,43 +15,7 @@ const PerfumeStack = dynamic(() => import('@/components/PerfumeStack'), {
   )
 })
 
-const FlowerPetal = ({ style, delay = 0 }: { style: any; delay: number }) => {
-  const size = Math.random() * 20 + 10;
-  const duration = Math.random() * 15 + 10;
-  
-  return (
-    <motion.div
-      className="absolute rounded-full bg-gradient-to-br from-pink-100/80 to-rose-100/80 backdrop-blur-sm"
-      style={{
-        ...style,
-        width: `${size}px`,
-        height: `${size}px`,
-        filter: 'blur(1px)',
-        rotate: Math.random() * 360,
-      }}
-      initial={{
-        y: -100,
-        x: Math.random() * window.innerWidth,
-        opacity: 0,
-        scale: 0,
-      }}
-      animate={{
-        y: window.innerHeight + 100,
-        x: style.x + (Math.random() * 200 - 100),
-        opacity: [0, 0.8, 0.8, 0],
-        scale: [0, 1, 0.5, 0],
-        rotate: 360 + (Math.random() * 180 - 90),
-      }}
-      transition={{
-        duration: duration,
-        delay: delay,
-        repeat: Infinity,
-        repeatType: 'loop',
-        ease: 'linear',
-      }}
-    />
-  );
-};
+// Removed individual FlowerPetal component as we've moved the logic inline for better performance
 
 export default function LuxeBeautyHomepage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -70,25 +34,25 @@ export default function LuxeBeautyHomepage() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, [mouseX, mouseY]);
   return (
-    <div className="min-h-screen overflow-hidden" style={{ backgroundColor: "#210a07" }}>
+    <div className="min-h-screen overflow-hidden bg-gradient-to-br from-white via-blue-50 to-blue-100">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 absolute top-0 left-0 right-0 z-50">
         <div className="flex items-center gap-3">
         
-          <span className="text-white text-xl font-semibold">Finesse & Co..</span>
+          <span className="text-white text-xl font-semibold bg-gradient-to-r from-pink-100 to-pink-400 via-white-100 bg-clip-text text-pink-400">Finesse & Co..</span>
         </div>
         {/* <Button className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-full ">
           <ShoppingCart className="w-4 h-4 mr-2" />
           Cart
         </Button> */}
-         <div className="relative w-16 ">
+        <div className="relative w-16 ">
                     <button
-                        className="w-full py-3 px-4 text-white font-semibold rounded-full bg-[#ed5386] hover:bg-[#ed5386] transition-colors border-2 border-[#c2c2d1] relative z-10"
+                        className="w-full py-3 px-4 text-blue-900 font-semibold rounded-full bg-gradient-to-r from-amber-300 via-amber-100 to-amber-300 hover:from-amber-200 hover:to-amber-100 transition-all duration-300 border-2 border-amber-200/50 relative z-10 shadow-lg"
                     >
                         <ShoppingCart className="w-7 h-7" />
           
                     </button>
-                    <div className="absolute -bottom-2 left-0 right-0 h-[calc(80%-1px)] bg-[#ffb3b3] rounded-full z-0"></div>
+                    <div className="absolute -bottom-2 left-0 right-0 h-[calc(80%-1px)] bg-amber-200/30 rounded-full z-0"></div>
                 </div>
       </header>
 
@@ -98,7 +62,7 @@ export default function LuxeBeautyHomepage() {
         <motion.div 
           className="absolute inset-0"
           style={{
-            background: 'linear-gradient(45deg, #ff6b6b, #ff8e8e, #ffb3b3, #ffd8d8, #ffb3b3, #ff8e8e, #ff6b6b)',
+            background: 'linear-gradient(45deg, #ffffff, #e0f2fe, #bae6fd, #7dd3fc, #38bdf8, #0ea5e9, #0284c7)',
             backgroundSize: '400% 400%',
             filter: 'blur(60px)',
             opacity: 0.7,
@@ -121,7 +85,7 @@ export default function LuxeBeautyHomepage() {
           transition={{ duration: 0.8 }}
         >
           <motion.h1 
-            className="text-5xl md:text-7xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-pink-300 via-white to-amber-200"
+            className="text-5xl md:text-7xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-900 via-blue-600 to-pink-400"
             style={{
               backgroundSize: '200% auto',
               textShadow: '0 0 20px rgba(255,255,255,0.3)',
@@ -139,7 +103,7 @@ export default function LuxeBeautyHomepage() {
           Finesse & Co..
           </motion.h1>
           <motion.p 
-            className="text-xl bg-clip-text text-transparent bg-gradient-to-r from-pink-200 to-amber-100"
+            className="text-xl bg-clip-text text-transparent bg-gradient-to-r from-blue-800 to-pink-400"
             style={{
               textShadow: '0 0 15px rgba(255,255,255,0.2)',
               WebkitBackgroundClip: 'text',
@@ -176,54 +140,105 @@ export default function LuxeBeautyHomepage() {
           <PerfumeStack />
         </div>
 
-        {/* Call to Action */}
-        <motion.div 
-          className="relative z-10 mt-12 text-center"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.8 }}
-        >
-          <Button 
-            className="bg-gradient-to-r from-pink-500 to-amber-500 hover:from-pink-600 hover:to-amber-600 text-white px-8 py-6 text-lg rounded-full shadow-lg transform transition-all duration-300 hover:scale-105"
-            size="lg"
-          >
-            Discover the Collection
-          </Button>
-        </motion.div>
-
-        {/* Animated Flower Petals */}
-        {isMounted && [...Array(25)].map((_, i) => (
-          <FlowerPetal
-            key={`flower-${i}`}
-            style={{
-              x: Math.random() * window.innerWidth,
-              y: -50,
+         <Link href="/collection">
+          <motion.button 
+            className="px-8 py-4 bg-gradient-to-r from-amber-300 via-transparent to-amber-300 text-white rounded-full text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 flex items-center group relative overflow-hidden"
+            whileHover={{ 
+              scale: 1.05,
+              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
             }}
-            delay={Math.random() * 5}
-          />
-        ))}
+            whileTap={{ scale: 0.98 }}
+          >
+            <span className="relative z-10 flex items-center">
+              Discover the Collection
+              <motion.span 
+                className="ml-2 inline-block"
+                initial={{ x: 0 }}
+                animate={{ x: [0, 4, 0] }}
+                transition={{ 
+                  repeat: Infinity, 
+                  duration: 1.5,
+                  ease: 'easeInOut'
+                }}
+              >
+                <ArrowRight className="w-5 h-5" />
+              </motion.span>
+            </span>
+            <motion.span 
+              className="absolute inset-0 bg-gradient-to-r from-pink-600 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              initial={{ x: '-100%' }}
+              whileHover={{ x: '0%' }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+            />
+          </motion.button>
+        </Link>
+
+        {/* Abundant Falling Petals */}
+        {isMounted && [...Array(150)].map((_, i) => {
+          const size = Math.random() * 30 + 10; // Larger size range
+          const duration = Math.random() * 15 + 15; // Slower falling
+          const delay = Math.random() * 10; // Staggered start
+          const startX = Math.random() * window.innerWidth;
+          const endX = startX + (Math.random() * 400 - 200); // More horizontal movement
+          
+          return (
+            <motion.div
+              key={`flower-${i}`}
+              className={`absolute rounded-full ${Math.random() > 0.5 ? 'bg-pink-200/60' : 'bg-blue-200/60'}`}
+              style={{
+                width: `${size}px`,
+                height: `${size}px`,
+                filter: 'blur(0.5px)',
+                rotate: Math.random() * 360,
+                left: startX,
+                top: -50,
+              }}
+              initial={{
+                y: -100,
+                x: startX,
+                opacity: 0,
+                scale: 0.5,
+              }}
+              animate={{
+                y: window.innerHeight + 100,
+                x: endX,
+                opacity: [0, 0.8, 0.8, 0],
+                scale: [0.5, 1, 0.8, 0],
+                rotate: 360 + (Math.random() * 360),
+              }}
+              transition={{
+                duration: duration,
+                delay: delay,
+                repeat: Infinity,
+                repeatDelay: Math.random() * 5,
+                ease: 'linear',
+              }}
+            />
+          );
+        })}
         
-        {/* Subtle floating particles */}
-        {[...Array(20)].map((_, i) => (
+        {/* Subtle floating particles - increased quantity */}
+        {[...Array(50)].map((_, i) => (
           <motion.div
-            key={i}
-            className="absolute rounded-full bg-white/20"
+            key={`particle-${i}`}
+            className={`absolute rounded-full ${Math.random() > 0.5 ? 'bg-pink-200/40' : 'bg-blue-200/40'}`}
             style={{
-              width: Math.random() * 8 + 2,
-              height: Math.random() * 8 + 2,
+              width: Math.random() * 6 + 2,
+              height: Math.random() * 6 + 2,
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 100}%`,
             }}
             animate={{
-              y: [0, Math.random() * 100 - 50],
-              x: [0, Math.random() * 100 - 50],
+              y: [0, Math.random() * 200 - 100],
+              x: [0, Math.random() * 200 - 100],
               opacity: [0.1, 0.6, 0.1],
             }}
             transition={{
-              duration: Math.random() * 10 + 10,
+              duration: Math.random() * 15 + 15,
               repeat: Infinity,
               repeatType: 'reverse',
               ease: 'easeInOut',
+              delay: Math.random() * 5,
             }}
           />
         ))}
