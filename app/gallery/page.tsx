@@ -3,10 +3,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useAnimation, useMotionValue, useTransform } from 'framer-motion';
 import { X, Menu, Play, Home, ShoppingBag, Video, ArrowRight } from 'lucide-react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import Head from 'next/head';
 import dynamic from 'next/dynamic';
+import { Cormorant_Garamond } from 'next/font/google';
+
+const cormorant = Cormorant_Garamond({
+  weight: ['400', '500', '600', '700'],
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-cormorant',
+});
 
 const FallingFlowers = dynamic(() => import('@/components/FallingFlowers'), {
   ssr: false,
@@ -225,7 +234,19 @@ const GalleryPage = () => {
   };
 
   return (
-    <div className="min-h-screen overflow-hidden bg-gradient-to-br from-white via-blue-50 to-blue-100 relative">
+    <div className="min-h-screen overflow-hidden bg-gradient-to-br from-white via-blue-50 to-blue-100 relative font-sans">
+      <style jsx global>{`
+        body {
+          font-family: 'Cormorant Garamond', serif;
+          font-weight: 400;
+          line-height: 1.6;
+        }
+        h1, h2, h3, h4, h5, h6 {
+          font-family: 'Cormorant Garamond', serif;
+          font-weight: 500;
+          letter-spacing: 0.5px;
+        }
+      `}</style>
       {isClient && <FallingFlowers count={15} />}
       <Head>
         <title>Gallery | Finesse & Co.</title>
@@ -320,8 +341,25 @@ const GalleryPage = () => {
               </Link>
             </nav>
             
-            {/* Mobile Menu Button */}
-            <div className="lg:hidden">
+            {/* Mobile Menu Button and WhatsApp */}
+            <div className="lg:hidden flex items-center space-x-2">
+              <a
+                href="https://wa.me/2348124139608?text=Hello!%20I'm%20interested%20in%20your%20products"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-full bg-gradient-to-r from-transparent to-gray-100 hover:from-gray-100 hover:to-gray-100 transition-all shadow-lg shadow-gray-100 hover:shadow-gray-200"
+                aria-label="Chat on WhatsApp"
+              >
+                <div className="relative h-10 w-10">
+                  <Image 
+                    src="/whatsapp.png" 
+                    alt="WhatsApp" 
+                    fill 
+                    className="object-contain"
+                    sizes="20px"
+                  />
+                </div>
+              </a>
               <Button
                 variant="ghost"
                 size="icon"

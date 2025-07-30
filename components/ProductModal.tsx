@@ -44,7 +44,7 @@ export default function ProductModal({
   if (!product) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto">
+    <div className="flex items-start justify-center p-4 overflow-y-auto" style={{ alignItems: 'center' }}>
       <motion.div 
         className="fixed inset-0 bg-black/80 backdrop-blur-sm"
         initial={{ opacity: 0 }}
@@ -54,13 +54,14 @@ export default function ProductModal({
       />
       <AnimatePresence>
         <motion.div 
-          className="relative bg-white rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto my-8 mx-auto"
+          className="relative bg-white rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto mx-auto my-auto"
           style={{
             position: 'relative',
-            top: '10%',
-            transform: 'translateY(-50%)',
-            WebkitTransform: 'translateY(-50%)',
-            msTransform: 'translateY(-50%)'
+            margin: 'auto',
+            top: 0,
+            transform: 'none',
+            WebkitTransform: 'none',
+            msTransform: 'none'
           }}
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -130,7 +131,20 @@ export default function ProductModal({
             </div>
 
             {/* Product Details */}
-            <div className="py-4">
+            <div className="py-4 px-2 sm:px-4">
+              <style jsx global>{`
+                .product-details * {
+                  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                  line-height: 1.5;
+                }
+                .product-details h2, .product-details h4 {
+                  font-weight: 600;
+                  color: #111827;
+                }
+                .product-details p {
+                  color: #4B5563;
+                }
+              `}</style>
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">{product.title}</h2>

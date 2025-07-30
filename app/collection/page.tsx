@@ -2,140 +2,37 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { ShoppingCart, Star, Filter, X, Menu, Home, ShoppingBag, Video, ArrowRight } from 'lucide-react';
+import { Filter, X, Menu, Home, ShoppingBag, Video, ArrowRight, MessageCircle, ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import WhatsAppButton from '@/components/WhatsAppButton';
+import { Cormorant_Garamond } from 'next/font/google';
+import { toast } from 'sonner';
+import ProductCard, { Product } from '@/components/ProductCard';
+
+const cormorant = Cormorant_Garamond({
+  weight: ['400', '500', '600', '700'],
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-cormorant',
+});
 
 const FallingFlowers = dynamic(() => import('@/components/FallingFlowers'), {
   ssr: false,
 });
 import Image from 'next/image';
 
-// Product Interface
-export interface Product {
-  id: number;
-  title: string;
-  description: string;
-  price: number;
-  rating: number;
-  image: string;
-  category: string;
-  details: {
-    topNotes: string[];
-    middleNotes: string[];
-    baseNotes: string[];
-    size: string;
-    concentration: string;
+// API Response Type
+interface ApiResponse {
+  success: boolean;
+  data: Product[];
+  pagination: {
+    total: number;
+    page: number;
+    pages: number;
   };
 }
-
-// Sample products data
-const products: Product[] = [
-  {
-    id: 1,
-    title: 'Sauvage Elixir',
-    description: 'A new olfactory signature that combines extreme freshness with warm and spicy notes.',
-    price: 150,
-    rating: 4.8,
-    image: '/glaciar.png',
-    category: 'Luxury',
-    details: {
-      topNotes: ['Lavender', 'Grapefruit', 'Cinnamon'],
-      middleNotes: ['Lavender', 'Jasmine', 'Nutmeg'],
-      baseNotes: ['Vanilla', 'Tonka Bean', 'Amber'],
-      size: '100ml',
-      concentration: 'Eau de Parfum'
-    }
-  },
-  {
-    id: 2,
-    title: 'Sauvage Elixir',
-    description: 'A new olfactory signature that combines extreme freshness with warm and spicy notes.',
-    price: 150,
-    rating: 4.8,
-    image: '/gucci.png',
-    category: 'Luxury',
-    details: {
-      topNotes: ['Lavender', 'Grapefruit', 'Cinnamon'],
-      middleNotes: ['Lavender', 'Jasmine', 'Nutmeg'],
-      baseNotes: ['Vanilla', 'Tonka Bean', 'Amber'],
-      size: '100ml',
-      concentration: 'Eau de Parfum'
-    }
-  },
-
-  {
-    id: 3,
-    title: 'Sauvage Elixir',
-    description: 'A new olfactory signature that combines extreme freshness with warm and spicy notes.',
-    price: 150,
-    rating: 4.8,
-    image: '/spec1.png',
-    category: 'EyeWears',
-    details: {
-      topNotes: ['Lavender', 'Grapefruit', 'Cinnamon'],
-      middleNotes: ['Lavender', 'Jasmine', 'Nutmeg'],
-      baseNotes: ['Vanilla', 'Tonka Bean', 'Amber'],
-      size: '100ml',
-      concentration: 'Eau de Parfum'
-    }
-  },
-  {
-    id: 4,
-    title: 'Sauvage Elixir',
-    description: 'A new olfactory signature that combines extreme freshness with warm and spicy notes.',
-    price: 150,
-    rating: 4.8,
-    image: '/spec2.png',
-    category: 'EyeWears',
-    details: {
-      topNotes: ['Lavender', 'Grapefruit', 'Cinnamon'],
-      middleNotes: ['Lavender', 'Jasmine', 'Nutmeg'],
-      baseNotes: ['Vanilla', 'Tonka Bean', 'Amber'],
-      size: '100ml',
-      concentration: 'Eau de Parfum'
-    }
-  },
-  // Add more products here...
-];
-
-// Product Card Component
-const ProductCard = ({ product, onClick }: { 
-  product: Product; 
-  onClick: () => void;
-}) => (
-  <motion.div 
-    className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300"
-    whileHover={{ y: -5 }}
-    onClick={onClick}
-  >
-    <div className="relative h-64">
-      <Image 
-        src={product.image} 
-        alt={product.title}
-        layout="fill"
-        objectFit="cover"
-        className="hover:scale-105 transition-transform duration-500"
-      />
-      <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-800 text-xs font-semibold px-2 py-1 rounded-full flex items-center">
-        <Star className="w-3 h-3 mr-1" />
-        {product.rating}
-      </div>
-    </div>
-    <div className="p-4">
-      <h3 className="font-bold text-lg mb-1">{product.title}</h3>
-      <p className="text-gray-500 text-sm mb-2">{product.category}</p>
-      <p className="text-gray-700 text-sm mb-3 line-clamp-2">{product.description}</p>
-      <div className="flex justify-between items-center">
-        <span className="font-bold">${product.price.toFixed(2)}</span>
-        <button className="bg-black text-white p-2 rounded-full hover:bg-gray-800 transition-colors">
-          <ShoppingCart className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  </motion.div>
-);
 
 // Product Modal Component
 const ProductModal = ({ 
@@ -177,11 +74,28 @@ const ProductModal = ({
           >
             <X className="w-5 h-5" />
           </button>
-          
+          <button 
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full shadow-md z-10"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPrev();
+            }}
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+          <button 
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full shadow-md z-10"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNext();
+            }}
+          >
+            <ChevronRight className="w-6 h-6" />
+          </button>
           <div className="grid md:grid-cols-2 gap-8 p-6">
             <div className="relative h-80 md:h-full">
               <Image
-                src={product.image}
+                src={product.images[0]}
                 alt={product.title}
                 layout="fill"
                 objectFit="cover"
@@ -196,42 +110,42 @@ const ProductModal = ({
                   {[...Array(5)].map((_, i) => (
                     <Star 
                       key={i} 
-                      className={`w-4 h-4 ${i < Math.floor(product.rating) ? 'fill-current' : ''}`} 
+                      className={`w-4 h-4 ${i < Math.floor(product.rating || 0) ? 'fill-current' : ''}`} 
                     />
                   ))}
                 </div>
-                <span className="text-sm text-gray-500">{product.rating.toFixed(1)}</span>
+                <span className="text-sm text-gray-500">{(product.rating || 0).toFixed(1)}</span>
               </div>
-              
+
               <p className="text-gray-700 mb-6">{product.description}</p>
               
               <div className="space-y-4 mb-6">
                 <div>
                   <h3 className="font-medium text-gray-900">Top Notes</h3>
-                  <p className="text-sm text-gray-600">{product.details.topNotes.join(', ')}</p>
+                  <p className="text-sm text-gray-600">{(product.details?.topNotes || []).join(', ')}</p>
                 </div>
                 <div>
                   <h3 className="font-medium text-gray-900">Middle Notes</h3>
-                  <p className="text-sm text-gray-600">{product.details.middleNotes.join(', ')}</p>
+                  <p className="text-sm text-gray-600">{(product.details?.middleNotes || []).join(', ')}</p>
                 </div>
                 <div>
                   <h3 className="font-medium text-gray-900">Base Notes</h3>
-                  <p className="text-sm text-gray-600">{product.details.baseNotes.join(', ')}</p>
+                  <p className="text-sm text-gray-600">{(product.details?.baseNotes || []).join(', ')}</p>
                 </div>
                 <div className="flex justify-between">
                   <div>
                     <h3 className="font-medium text-gray-900">Size</h3>
-                    <p className="text-sm text-gray-600">{product.details.size}</p>
+                    <p className="text-sm text-gray-600">{product.details?.size || 'N/A'}</p>
                   </div>
                   <div>
                     <h3 className="font-medium text-gray-900">Concentration</h3>
-                    <p className="text-sm text-gray-600">{product.details.concentration}</p>
+                    <p className="text-sm text-gray-600">{product.details?.concentration || 'N/A'}</p>
                   </div>
                 </div>
               </div>
               
               <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold">${product.price.toFixed(2)}</span>
+                <span className="text-2xl font-bold">₦{product.price.toFixed(2)}</span>
                 <button className="bg-black text-white px-6 py-2 rounded-full hover:bg-gray-800 transition-colors">
                   Add to Cart
                 </button>
@@ -245,10 +159,21 @@ const ProductModal = ({
 };
 
 export default function CollectionPage() {
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 12;
+  
+  // Initialize client-side only
   const [isClient, setIsClient] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
   const [sortBy, setSortBy] = useState<'price-asc' | 'price-desc' | 'rating'>('price-asc');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -263,44 +188,103 @@ export default function CollectionPage() {
   // Filter and sort products
   const filteredProducts = products
     .filter(product => {
-      if (selectedCategory === 'All') return true;
+      if (selectedCategory === 'all') return true;
       return product.category === selectedCategory;
     })
     .sort((a, b) => {
       if (sortBy === 'price-asc') return a.price - b.price;
       if (sortBy === 'price-desc') return b.price - a.price;
-      return b.rating - a.rating;
+      return (b.rating || 0) - (a.rating || 0);
     });
 
-  const openProduct = (product: Product, index: number) => {
-    setSelectedIndex(index);
-    setSelectedProduct(product);
-    document.body.style.overflow = 'hidden';
-  };
-
-  const closeModal = () => {
-    setSelectedProduct(null);
-    document.body.style.overflow = 'auto';
-  };
-
-  const goToNext = () => {
-    if (selectedIndex < filteredProducts.length - 1) {
-      const newIndex = selectedIndex + 1;
-      setSelectedIndex(newIndex);
-      setSelectedProduct(filteredProducts[newIndex]);
+  // Fetch products from API
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/products?category=${selectedCategory === 'all' ? '' : selectedCategory}&page=${page}&limit=${itemsPerPage}`);
+      const data: ApiResponse = await response.json();
+      
+      if (data.success) {
+        setProducts(data.data);
+        setTotalPages(data.pagination.pages);
+      } else {
+        toast.error('Failed to fetch products');
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast.error('Error loading products');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const goToPrev = () => {
-    if (selectedIndex > 0) {
-      const newIndex = selectedIndex - 1;
-      setSelectedIndex(newIndex);
+  // Fetch products when category or page changes
+  useEffect(() => {
+    fetchProducts();
+  }, [selectedCategory, page]);
+
+  // Navigation functions for modal
+  const goToNextProduct = () => {
+    if (currentIndex < filteredProducts.length - 1) {
+      const newIndex = currentIndex + 1;
+      setCurrentIndex(newIndex);
       setSelectedProduct(filteredProducts[newIndex]);
+    } else if (page < totalPages) {
+      // Load next page if available
+      setPage(page + 1);
+      // The selected product will be updated when the new data loads
+    }
+  };
+
+  const goToPrevProduct = () => {
+    if (currentIndex > 0) {
+      const newIndex = currentIndex - 1;
+      setCurrentIndex(newIndex);
+      setSelectedProduct(filteredProducts[newIndex]);
+    } else if (page > 1) {
+      // Load previous page if available
+      setPage(page - 1);
+      // The selected product will be updated when the new data loads
+    }
+  };
+
+  const openProduct = (product: Product, index: number, e?: React.MouseEvent) => {
+    e?.preventDefault();
+    setCurrentIndex(index);
+    setSelectedProduct(product);
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = 'hidden';
+    }
+  };
+
+  const closeProduct = () => {
+    setSelectedProduct(null);
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = 'auto';
     }
   };
 
   return (
-    <div className="min-h-screen overflow-hidden bg-gradient-to-br from-white via-blue-50 to-blue-100 relative">
+    <div className="min-h-screen overflow-hidden bg-gradient-to-br from-white via-blue-50 to-blue-100 relative font-sans">
+      <style jsx global>{`
+        body {
+          font-family: 'Cormorant Garamond', serif;
+          font-weight: 400;
+          line-height: 1.6;
+        }
+        h1, h2, h3, h4, h5, h6 {
+          font-family: 'Cormorant Garamond', serif;
+          font-weight: 500;
+          letter-spacing: 0.5px;
+        }
+      `}</style>
+      {/* WhatsApp Button - Fixed on middle right (Desktop only) */}
+      <WhatsAppButton 
+        position="middle-right"
+        size="lg"
+        className="hidden md:block"
+      />
+      
       {isClient && <FallingFlowers count={15} />}
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
@@ -388,20 +372,38 @@ export default function CollectionPage() {
             
             {/* Mobile Menu Button */}
             <div className="lg:hidden">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="text-gray-700 hover:bg-pink-50 z-50 relative"
-              >
-                <Menu className={`h-6 w-6 transition-transform ${isMenuOpen ? 'rotate-90' : ''}`} />
-                <span className="sr-only">Toggle Menu</span>
-              </Button>
+              <div className="flex items-center space-x-2">
+                <a
+                  href="https://wa.me/2348124139608?text=Hello!%20I'm%20interested%20in%20your%20products"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 rounded-full bg-gradient-to-r from-transparent to-gray-100 hover:from-gray-100 hover:to-gray-100 transition-all shadow-lg shadow-gray-100 hover:shadow-gray-200"
+                  aria-label="Chat on WhatsApp"
+                >
+                  <div className="relative h-10 w-10">
+                    <Image 
+                      src="/whatsapp.png" 
+                      alt="WhatsApp" 
+                      fill 
+                      className="object-contain"
+                      sizes="20px"
+                    />
+                  </div>
+                </a>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                  className="md:hidden"
+                >
+                  <Menu className="h-6 w-6" />
+                </Button>
+              </div>
             </div>
 
             {/* Mobile Menu */}
             <AnimatePresence>
-              {isMenuOpen && (
+              {isMobileMenuOpen && (
                 <motion.div
                   initial={{ opacity: 0, y: -20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -443,7 +445,7 @@ export default function CollectionPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Our Collection</h1>
-              <p className="text-gray-600">Discover our premium selection of fragrances</p>
+              <p className="text-gray-600">Discover our premium Collections </p>
             </div>
             
             <div className="flex items-center space-x-4">
@@ -529,21 +531,59 @@ export default function CollectionPage() {
         </div>
 
         {/* Product Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredProducts.map((product, index) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onClick={() => openProduct(product, index)}
-            />
-          ))}
-        </div>
-
-        {filteredProducts.length === 0 && (
-          <div className="text-center py-12">
-            <h3 className="text-lg font-medium text-gray-900">No products found</h3>
-            <p className="mt-1 text-gray-500">Try adjusting your filters to find what you're looking for.</p>
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
           </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              {filteredProducts.map((product, index) => (
+                  <div key={product._id} className="h-full">
+                    <ProductCard 
+                      product={{
+                        ...product,
+                        id: product._id,
+                        details: {
+                          ...(product.details || {}),
+                          size: product.details?.size,
+                          concentration: product.details?.concentration,
+                          topNotes: product.details?.topNotes,
+                          middleNotes: product.details?.middleNotes,
+                          baseNotes: product.details?.baseNotes
+                        }
+                      }}
+                      onClick={() => {
+                        window.location.href = `/products/${product._id}`;
+                      }}
+                    />
+                  </div>
+                ))}
+            </div>
+            
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-center mt-8 space-x-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  Previous
+                </Button>
+                <span className="flex items-center px-4">
+                  Page {page} of {totalPages}
+                </span>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </main>
 
@@ -552,11 +592,11 @@ export default function CollectionPage() {
         {selectedProduct && (
           <ProductModal
             product={selectedProduct}
-            onClose={closeModal}
-            onNext={goToNext}
-            onPrev={goToPrev}
-            hasNext={selectedIndex < filteredProducts.length - 1}
-            hasPrev={selectedIndex > 0}
+            onClose={closeProduct}
+            onNext={goToNextProduct}
+            onPrev={goToPrevProduct}
+            hasNext={currentIndex < filteredProducts.length - 1 || page < totalPages}
+            hasPrev={currentIndex > 0 || page > 1}
           />
         )}
       </AnimatePresence>

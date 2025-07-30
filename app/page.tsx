@@ -16,7 +16,6 @@ const PerfumeStack = dynamic(() => import('@/components/PerfumeStack'), {
 })
 
 // Removed individual FlowerPetal component as we've moved the logic inline for better performance
-
 export default function LuxeBeautyHomepage() {
   const [isMounted, setIsMounted] = useState(false);
   const mouseX = useMotionValue(0);
@@ -136,7 +135,7 @@ export default function LuxeBeautyHomepage() {
         </motion.div>
 
         {/* 3D Perfume Stack */}
-        <div className="relative z-10">
+        <div className="relative z-10 mb-7">
           <PerfumeStack />
         </div>
 

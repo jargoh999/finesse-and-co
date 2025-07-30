@@ -1,76 +1,125 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import Image from 'next/image';
-import { useState } from 'react';
-import { ShoppingCart, Star, Heart, Share2 } from 'lucide-react';
+import { ShoppingCart, Star, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 
-interface Product {
-  id: number;
+export interface ProductDetails {
+  topNotes?: string[];
+  middleNotes?: string[];
+  baseNotes?: string[];
+  size?: string;
+  concentration?: string;
+  [key: string]: any;
+}
+
+export interface Product {
+  _id: string;
+  id: string;
   title: string;
   description: string;
   price: number;
-  rating: number;
-  image: string;
+  category: string;
+  images: string[];
+  stock: number;
+  rating?: number;
+  numReviews?: number;
+  isFeatured?: boolean;
+  details?: ProductDetails;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export default function ProductCard({ 
-  product,
-  onClick 
-}: { 
-  product: Product; 
-  onClick: () => void 
-}) {
-  const [isHovered, setIsHovered] = useState(false);
-  
+interface ProductCardProps {
+  product: Product;
+  onClick?: () => void;
+}
+
+export default function ProductCard({ product, onClick }: ProductCardProps) {
   return (
-    <motion.div
-      className="product-card glass-effect p-4 rounded-2xl overflow-hidden relative"
+    <div 
+      className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow h-full flex flex-col cursor-pointer"
       onClick={onClick}
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
-      whileHover={{ y: -10, scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
     >
-      <div className="relative h-64 w-full mb-4 rounded-xl overflow-hidden">
+      {/* Product Image */}
+      <div className="relative h-48 w-full bg-gray-50">
         <Image
-          src={product.image}
+          src={product.images?.[0] || '/placeholder-product.jpg'}
           alt={product.title}
           fill
-          className="object-cover transition-transform duration-500 hover:scale-105"
-          priority
+          className="object-cover"
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
-          <div className="text-white">
-            <h3 className="text-xl font-bold">{product.title}</h3>
-            <p className="text-sm opacity-90">${product.price.toFixed(2)}</p>
+        {product.isFeatured && (
+          <div className="absolute top-2 left-2 bg-pink-500 text-white text-[10px] font-bold px-2 py-0.5 rounded">
+            Featured
+          </div>
+        )}
+      </div>
+      
+      {/* Product Info */}
+      <div className="p-3 flex-1 flex flex-col">
+        <div className="flex-1">
+          <h3 className="font-medium text-sm sm:text-base text-gray-900 mb-1 line-clamp-1">
+            {product.title}
+          </h3>
+          <p className="text-xs sm:text-sm text-gray-500 mb-2 line-clamp-2">
+            {product.description}
+          </p>
+          
+          {/* Product Details */}
+          <div className="space-y-1 text-xs text-gray-600 mt-2">
+            <div className="flex items-center">
+              <span className="font-medium w-16">Price:</span>
+              <span>₦{product.price.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center">
+              <span className="font-medium w-16">Rating:</span>
+              <div className="flex items-center">
+                <Star className="w-3 h-3 text-yellow-400 fill-current mr-1" />
+                <span>{product.rating?.toFixed(1) || 'N/A'}</span>
+              </div>
+            </div>
+            {product.details?.size && (
+              <div className="flex items-center">
+                <span className="font-medium w-16">Size:</span>
+                <span>{product.details.size}</span>
+              </div>
+            )}
+            {product.details?.concentration && (
+              <div className="flex items-center">
+                <span className="font-medium w-16">Conc:</span>
+                <span className="line-clamp-1">{product.details.concentration}</span>
+              </div>
+            )}
           </div>
         </div>
-        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-1">
-          <Star className="w-4 h-4 text-amber-400 fill-current" />
-          <span className="text-xs font-medium">{product.rating}</span>
-        </div>
-      </div>
-      <div className="p-2">
-        <h3 className="font-semibold text-gray-800">{product.title}</h3>
-        <p className="text-sm text-gray-600 mt-1">{product.description}</p>
-        <div className="mt-3 flex justify-between items-center">
-          <span className="text-lg font-bold text-gray-900">${product.price.toFixed(2)}</span>
-          <button 
-            className="p-2 rounded-full bg-gradient-to-r from-pink-500 to-blue-500 text-white"
+        
+        {/* Action Buttons */}
+        <div className="mt-3 pt-2 border-t border-gray-100 flex justify-between items-center">
+          <div 
+            className="text-xs sm:text-sm text-pink-600 hover:text-pink-700 font-medium flex items-center"
             onClick={(e) => {
               e.stopPropagation();
-              // Add to cart logic here
+              window.location.href = `/products/${product.id}`;
             }}
           >
-            <ShoppingCart className="w-4 h-4" />
+            <span>View Details</span>
+            <ChevronRight className="w-4 h-4 ml-1" />
+          </div>
+          <button 
+            className="bg-pink-600 text-white text-xs sm:text-sm px-3 py-1.5 rounded-full hover:bg-pink-700 transition-colors flex items-center"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              // Handle add to cart
+            }}
+          >
+            <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+            <span>Add to Cart</span>
           </button>
         </div>
       </div>
-      <div className="glossy-overlay" />
-    </motion.div>
+    </div>
   );
 }
