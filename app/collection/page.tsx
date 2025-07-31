@@ -197,31 +197,63 @@ export default function CollectionPage() {
       return (b.rating || 0) - (a.rating || 0);
     });
 
-  // Fetch products from API
-  const fetchProducts = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/products?category=${selectedCategory === 'all' ? '' : selectedCategory}&page=${page}&limit=${itemsPerPage}`);
-      const data: ApiResponse = await response.json();
-      
-      if (data.success) {
-        setProducts(data.data);
-        setTotalPages(data.pagination.pages);
-      } else {
-        toast.error('Failed to fetch products');
-      }
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      toast.error('Error loading products');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Fetch products when category or page changes
   useEffect(() => {
+    let isMounted = true;
+    
+    const fetchProducts = async () => {
+      console.log('Fetching products with params:', { 
+        category: selectedCategory, 
+        page, 
+        itemsPerPage 
+      });
+
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `/api/products?category=${selectedCategory === 'all' ? '' : selectedCategory}&page=${page}&limit=${itemsPerPage}`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data: ApiResponse = await response.json();
+        console.log('API Response:', data);
+        
+        if (!isMounted) return;
+        
+        if (data.success) {
+          setProducts(data.data);
+          setTotalPages(data.pagination.pages);
+          console.log('Updated products and totalPages:', {
+            productsCount: data.data.length,
+            totalPages: data.pagination.pages,
+            currentPage: data.pagination.page
+          });
+        } else {
+          console.error('API Error:', data);
+          toast.error('Failed to fetch products');
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.error('Error fetching products:', error);
+          toast.error('Error loading products');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
     fetchProducts();
-  }, [selectedCategory, page]);
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedCategory, page, itemsPerPage]);
 
   // Navigation functions for modal
   const goToNextProduct = () => {
@@ -230,9 +262,9 @@ export default function CollectionPage() {
       setCurrentIndex(newIndex);
       setSelectedProduct(filteredProducts[newIndex]);
     } else if (page < totalPages) {
-      // Load next page if available
+      // Go to next page and reset index to 0
       setPage(page + 1);
-      // The selected product will be updated when the new data loads
+      setCurrentIndex(0);
     }
   };
 
@@ -242,9 +274,9 @@ export default function CollectionPage() {
       setCurrentIndex(newIndex);
       setSelectedProduct(filteredProducts[newIndex]);
     } else if (page > 1) {
-      // Load previous page if available
+      // Go to previous page and set index to last item
       setPage(page - 1);
-      // The selected product will be updated when the new data loads
+      setCurrentIndex(itemsPerPage - 1);
     }
   };
 
@@ -265,7 +297,17 @@ export default function CollectionPage() {
   };
 
   return (
-    <div className="min-h-screen overflow-hidden bg-gradient-to-br from-white via-blue-50 to-blue-100 relative font-sans">
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-white via-blue-50 to-blue-100 relative font-sans">
+      <style jsx global>{`
+        html {
+          overflow-x: hidden;
+          width: 100%;
+        }
+        body {
+          max-width: 100%;
+          overflow-x: hidden;
+        }
+      `}</style>
       <style jsx global>{`
         body {
           font-family: 'Cormorant Garamond', serif;
@@ -564,23 +606,118 @@ export default function CollectionPage() {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex justify-center mt-8 space-x-2">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                >
-                  Previous
-                </Button>
+                <div className="relative">
+                  <button
+                    id="prev-page-button"
+                    onClick={(e) => {
+                      console.log('Previous button clicked!');
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                      
+                      console.log('Current page:', page, 'Total pages:', totalPages);
+                      
+                      if (page > 1) {
+                        const prevPage = page - 1;
+                        console.log('Attempting to set page to:', prevPage);
+                        setPage(prevPage);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      } else {
+                        console.log('Cannot go to previous page: already on first page');
+                      }
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    disabled={page === 1}
+                    className={`px-4 py-2 rounded-md border relative z-10 ${
+                      page === 1
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                        : 'bg-white hover:bg-gray-50 cursor-pointer active:scale-95 transition-transform'
+                    }`}
+                    style={{
+                      position: 'relative',
+                      zIndex: 10,
+                      pointerEvents: 'auto'
+                    }}
+                  >
+                    Previous
+                  </button>
+                  {/* Debug overlay */}
+                  <div 
+                    className="absolute inset-0 bg-red-500 opacity-0 hover:opacity-10 z-0"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      zIndex: 5
+                    }}
+                    onClick={(e) => {
+                      console.log('Previous button overlay clicked!');
+                      e.stopPropagation();
+                    }}
+                  />
+                </div>
                 <span className="flex items-center px-4">
                   Page {page} of {totalPages}
                 </span>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages}
-                >
-                  Next
-                </Button>
+                <div className="relative">
+                  <button
+                    id="next-page-button"
+                    onClick={(e) => {
+                      console.log('Next button clicked!');
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                      
+                      console.log('Current page:', page, 'Total pages:', totalPages);
+                      
+                      if (page < totalPages) {
+                        const nextPage = page + 1;
+                        console.log('Attempting to set page to:', nextPage);
+                        setPage(nextPage);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      } else {
+                        console.log('Cannot go to next page: already on last page');
+                      }
+                    }}
+                    onMouseDown={(e) => {
+                      // Stop propagation at the mouse down level
+                      e.stopPropagation();
+                    }}
+                    disabled={page >= totalPages}
+                    className={`px-4 py-2 rounded-md border relative z-10 ${
+                      page >= totalPages
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                        : 'bg-white hover:bg-gray-50 cursor-pointer active:scale-95 transition-transform'
+                    }`}
+                    style={{
+                      position: 'relative',
+                      zIndex: 10,
+                      pointerEvents: 'auto'
+                    }}
+                  >
+                    Next
+                  </button>
+                  {/* Debug overlay */}
+                  <div 
+                    className="absolute inset-0 bg-red-500 opacity-0 hover:opacity-10 z-0"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      zIndex: 5
+                    }}
+                    onClick={(e) => {
+                      console.log('Overlay clicked!');
+                      e.stopPropagation();
+                    }}
+                  />
+                </div>
               </div>
             )}
           </>

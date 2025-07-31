@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Loader2, Image as ImageIcon, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Loader2, Image as ImageIcon, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -58,6 +58,12 @@ export default function AdminProductsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
+  
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
+  const [totalItems, setTotalItems] = useState(0);
   const getInitialFormData = (): ProductFormData => ({
     title: '',
     description: '',
@@ -76,12 +82,12 @@ export default function AdminProductsPage() {
   // Fetch products
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [page]);
 
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/products');
+      const res = await fetch(`/api/products?page=${page}&limit=${itemsPerPage}`);
       const data = await res.json();
       
       if (!res.ok) {
@@ -89,6 +95,8 @@ export default function AdminProductsPage() {
       }
       
       setProducts(Array.isArray(data.data) ? data.data : []);
+      setTotalItems(data.pagination?.total || 0);
+      setTotalPages(data.pagination?.pages || 1);
     } catch (error: any) {
       console.error('Error fetching products:', error);
       toast.error(error.message || 'Failed to load products');
@@ -561,9 +569,10 @@ export default function AdminProductsPage() {
       </Dialog>
 
       {/* Products List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden h-[calc(100vh-200px)]">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+      <div className="bg-white rounded-lg shadow overflow-hidden flex flex-col h-[calc(100vh-200px)]">
+        <div className="flex-1 overflow-auto">
+          <div className="min-w-max">
+            <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -653,6 +662,85 @@ export default function AdminProductsPage() {
               )}
             </tbody>
           </table>
+          </div>
+          
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">
+                    Showing <span className="font-medium">{(page - 1) * itemsPerPage + 1}</span> to{' '}
+                    <span className="font-medium">
+                      {Math.min(page * itemsPerPage, totalItems)}
+                    </span>{' '}
+                    of <span className="font-medium">{totalItems}</span> results
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    <button
+                      onClick={() => setPage(1)}
+                      disabled={page === 1}
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                    >
+                      <span className="sr-only">First</span>
+                      <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                      <ChevronLeft className="h-5 w-5 -ml-2" aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                    >
+                      <span className="sr-only">Previous</span>
+                      <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                    </button>
+                    
+                    <div className="flex items-center px-2">
+                      <span className="text-sm text-gray-700">
+                        Page {page} of {totalPages}
+                      </span>
+                    </div>
+                    
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                      className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                    >
+                      <span className="sr-only">Next</span>
+                      <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={() => setPage(totalPages)}
+                      disabled={page >= totalPages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                    >
+                      <span className="sr-only">Last</span>
+                      <ChevronRight className="h-5 w-5 -mr-2" aria-hidden="true" />
+                      <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
