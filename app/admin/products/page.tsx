@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
+import { Category } from '@/models/Product';
 import { useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, Loader2, Image as ImageIcon, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,12 +21,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { toast } from 'sonner';
 
-type Product = {
+interface Product {
   _id: string;
   title: string;
   description: string;
   price: number;
-  category: 'Perfume' | 'Eyewear' | 'Clothing' | 'Accessories' | 'Fragrance' | 'Jewelry' | 'Watches' | 'Footwear' | 'Gadgets' | 'Other';
+  category: Category;
   stock: number;
   images: string[];
   rating?: number;
@@ -36,20 +37,9 @@ type Product = {
   updatedAt?: string;
 };
 
-type Category = 'Perfume' | 'Eyewear' | 'Clothing' | 'Accessories' | 'Fragrance' | 'Jewelry' | 'Watches' | 'Footwear' | 'Gadgets' | 'Other';
-
-type ProductFormData = {
-  title: string;
-  description: string;
-  price: number;
-  category: Category;
-  stock: number;
-  images: string[];
-  rating: number;
-  numReviews: number;
-  isFeatured: boolean;
+interface ProductFormData extends Omit<Product, '_id' | 'createdAt' | 'updatedAt' | 'details'> {
   details: Map<string, any>;
-};
+}
 
 export default function AdminProductsPage() {
   const router = useRouter();
@@ -134,8 +124,7 @@ export default function AdminProductsPage() {
         // Type-safe category update
         const validCategories = [
           'Perfume', 'Eyewear', 'Clothing', 'Accessories', 
-          'Fragrance', 'Jewelry', 'Watches', 'Footwear', 
-          'Gadgets', 'Other'
+          'Fragrance', 'Jewelry', 'Watches', 'Other', 'Cap', 'Nails', 'Toe-Nails'
         ] as const satisfies readonly Category[];
         
         const category = validCategories.includes(value as Category) 
@@ -316,7 +305,7 @@ export default function AdminProductsPage() {
         rating: Number(formData.rating) || 0,
         numReviews: Number(formData.numReviews) || 0,
         isFeatured: Boolean(formData.isFeatured) || false,
-        details: formData.details ? Object.fromEntries(formData.details) : {}
+        details: formData.details ? (formData.details instanceof Map ? Object.fromEntries(formData.details) : formData.details) : {}
       };
       
       console.log('Submitting product:', productData);
@@ -426,8 +415,9 @@ export default function AdminProductsPage() {
                     <SelectItem value="Fragrance">Fragrance</SelectItem>
                     <SelectItem value="Jewelry">Jewelry</SelectItem>
                     <SelectItem value="Watches">Watches</SelectItem>
-                    <SelectItem value="Footwear">Footwear</SelectItem>
-                    <SelectItem value="Gadgets">Gadgets</SelectItem>
+                    <SelectItem value="Cap">Cap</SelectItem>
+                    <SelectItem value="Nails">Nails</SelectItem>
+                    <SelectItem value="Toe-Nails">Toe Nails</SelectItem>
                     <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
@@ -530,7 +520,7 @@ export default function AdminProductsPage() {
                 <Label htmlFor="details" className="text-sm font-medium text-gray-700">Additional Details (JSON)</Label>
                 <Textarea
                   id="details"
-                  value={JSON.stringify(Object.fromEntries(formData.details), null, 2)}
+                  value={JSON.stringify(formData.details || {}, null, 2)}
                   onChange={(e) => {
                     try {
                       const details = new Map(Object.entries(JSON.parse(e.target.value)));

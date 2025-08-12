@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { Filter, X, Menu, Home, ShoppingBag, Video, ArrowRight, MessageCircle, ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { Filter, X, Menu, Home, ShoppingBag, Video, ArrowRight, MessageCircle, ChevronLeft, ChevronRight, Star, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -10,6 +10,7 @@ import WhatsAppButton from '@/components/WhatsAppButton';
 import { Cormorant_Garamond } from 'next/font/google';
 import { toast } from 'sonner';
 import ProductCard, { Product } from '@/components/ProductCard';
+import FloatingCartButton from '@/components/FloatingCartButton';
 
 const cormorant = Cormorant_Garamond({
   weight: ['400', '500', '600', '700'],
@@ -159,7 +160,21 @@ const ProductModal = ({
 };
 
 export default function CollectionPage() {
+  // Get category from URL if it exists
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  
+  // Update selected category when URL changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const category = params.get('category');
+      if (category) {
+        setSelectedCategory(category);
+        // Reset to first page when category changes
+        setPage(1);
+      }
+    }
+  }, []);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -410,11 +425,13 @@ export default function CollectionPage() {
                 <Video className="w-4 h-4 mr-2" />
                 Gallery
               </Link>
+              <FloatingCartButton className="ml-2" />
             </nav>
             
             {/* Mobile Menu Button */}
             <div className="lg:hidden">
               <div className="flex items-center space-x-2">
+                <FloatingCartButton className="mr-2" />
                 <a
                   href="https://wa.me/2348124139608?text=Hello!%20I'm%20interested%20in%20your%20products"
                   target="_blank"
@@ -454,20 +471,13 @@ export default function CollectionPage() {
                   className="lg:hidden absolute top-full left-0 right-0 bg-white shadow-lg rounded-b-lg overflow-hidden z-50"
                 >
                   <div className="flex flex-col p-4 space-y-2">
-                    <button 
-                      onClick={() => setIsMobileFilterOpen(true)}
-                      className="flex items-center px-4 py-2 text-gray-700 hover:bg-pink-50 rounded-md transition-colors w-full text-left"
-                    >
-                      <Filter className="mr-3 h-5 w-5" />
-                      Filters
-                    </button>
                     <Link href="/" className="flex items-center px-4 py-2 text-gray-700 hover:bg-pink-50 rounded-md transition-colors">
                       <Home className="mr-3 h-5 w-5" />
                       Home
                     </Link>
-                    <Link href="/collection" className="flex items-center px-4 py-2 text-pink-600 bg-pink-50 rounded-md font-medium">
+                    <Link href="/categories" className="flex items-center px-4 py-2 text-pink-600 bg-pink-50 rounded-md font-medium">
                       <ShoppingBag className="mr-3 h-5 w-5" />
-                      Collection
+                      Categories
                     </Link>
                     <Link href="/gallery" className="flex items-center px-4 py-2 text-gray-700 hover:bg-pink-50 rounded-md transition-colors">
                       <Video className="mr-3 h-5 w-5" />

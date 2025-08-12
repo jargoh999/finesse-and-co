@@ -6,6 +6,14 @@ import { Star, ChevronLeft, ShoppingCart, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Playfair_Display } from 'next/font/google';
+
+// Add a more feminine and legible font
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-playfair',
+});
 
 interface ProductDetails {
   topNotes?: string[];
@@ -115,9 +123,9 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Product Not Found</h1>
           <p className="text-gray-600 mb-4">The product you're looking for doesn't exist or an error occurred.</p>
-          <Link href="/collection" className="text-pink-600 hover:underline inline-flex items-center">
+          <Link href="/categories" className="text-pink-600 hover:underline inline-flex items-center">
             <ChevronLeft className="w-4 h-4 mr-1" />
-            Back to Collection
+            Back to Categories
           </Link>
         </div>
       </div>
@@ -126,14 +134,14 @@ export default function ProductPage({ params }: { params: { id: string } }) {
 
   return (
     
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 ${playfair.variable} font-sans`}>
       <div className="mb-8">
         <Link 
-          href="/collection" 
+          href="/categories" 
           className="text-pink-600 hover:text-pink-700 inline-flex items-center text-sm font-medium transition-colors duration-200"
         >
           <ChevronLeft className="w-4 h-4 mr-1.5" />
-          Back to Collection
+          Back to Categories
         </Link>
       </div>
 

@@ -139,7 +139,7 @@ export default function LuxeBeautyHomepage() {
           <PerfumeStack />
         </div>
 
-         <Link href="/collection">
+         <Link href="/categories">
           <motion.button 
             className="px-8 py-4 bg-gradient-to-r from-amber-300 via-transparent to-amber-300 text-white rounded-full text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 flex items-center group relative overflow-hidden"
             whileHover={{ 

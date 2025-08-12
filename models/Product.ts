@@ -1,5 +1,9 @@
 import mongoose from 'mongoose';
 
+export type Category = 'Perfume' | 'Eyewear' | 'Clothing' | 'Accessories' | 'Fragrance' | 'Jewelry' | 'Watches' | 'Cap' | 'Nails' | 'Toe-Nails' | 'Other';
+
+const categoryValues: Category[] = ['Perfume', 'Eyewear', 'Clothing', 'Accessories', 'Fragrance', 'Jewelry', 'Watches', 'Cap', 'Nails', 'Toe-Nails', 'Other'];
+
 const productSchema = new mongoose.Schema({
   title: {
     type: String,
@@ -18,7 +22,7 @@ const productSchema = new mongoose.Schema({
   category: {
     type: String,
     required: true,
-    enum: ['Perfume', 'Eyewear', 'Clothing', 'Accessories', 'Other', 'Fragrance', 'Jewelry' , 'Watches']
+    enum: categoryValues
   },
   images: [{
     type: String, // Cloudinary URL

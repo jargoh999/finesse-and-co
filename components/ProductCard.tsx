@@ -1,8 +1,11 @@
 'use client';
 
 import Image from 'next/image';
-import { ShoppingCart, Star, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Star, ChevronRight, Check } from 'lucide-react';
 import Link from 'next/link';
+import { useCart } from '@/contexts/CartContext';
+import { useState, useEffect } from 'react';
+import UserInfoPopup, { UserInfo } from './UserInfoPopup';
 
 export interface ProductDetails {
   topNotes?: string[];
@@ -36,6 +39,57 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product, onClick }: ProductCardProps) {
+  const { addToCart, isLoading, userInfo, setUserInfo } = useCart();
+  const [showUserInfoPopup, setShowUserInfoPopup] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isInCart, setIsInCart] = useState(false);
+
+  // Check if this product is already in the cart
+  useEffect(() => {
+    if (userInfo) {
+      // This would be set based on the actual cart data
+      // For now, we'll assume it's not in the cart
+      setIsInCart(false);
+    }
+  }, [userInfo]);
+
+  const handleAddToCartClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    try {
+      if (userInfo) {
+        // User info exists, add to cart directly
+        await addToCart(product._id, 1);
+      } else {
+        // Show user info popup
+        setShowUserInfoPopup(true);
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      // Error is already handled by CartContext
+    }
+  };
+
+  const handleUserInfoSubmit = async (info: UserInfo) => {
+    try {
+      setIsProcessing(true);
+      
+      // Set user info and wait for it to be saved
+      await setUserInfo(info);
+      
+      // Add to cart with the product ID
+      await addToCart(product._id, 1);
+      
+      setShowUserInfoPopup(false);
+    } catch (error) {
+      console.error('Error processing cart:', error);
+      // Error is already handled by CartContext
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div 
       className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow h-full flex flex-col cursor-pointer"
@@ -107,17 +161,21 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
             <span>View Details</span>
             <ChevronRight className="w-4 h-4 ml-1" />
           </div>
-          <button 
-            className="bg-pink-600 text-white text-xs sm:text-sm px-3 py-1.5 rounded-full hover:bg-pink-700 transition-colors flex items-center"
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              // Handle add to cart
-            }}
-          >
-            <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-            <span>Add to Cart</span>
-          </button>
+          <div className="relative">
+            <button 
+              className="text-white text-xs sm:text-sm px-3 py-1.5 rounded-full bg-gray-400 cursor-not-allowed flex items-center"
+              disabled={true}
+            >
+              <span>Coming Soon</span>
+            </button>
+            
+            <UserInfoPopup
+              isOpen={showUserInfoPopup}
+              onClose={() => setShowUserInfoPopup(false)}
+              onContinue={handleUserInfoSubmit}
+              productName={product.title}
+            />
+          </div>
         </div>
       </div>
     </div>
