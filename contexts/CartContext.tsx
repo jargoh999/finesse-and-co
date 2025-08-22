@@ -157,7 +157,10 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addToCart = async (productId: string, quantity: number = 1) => {
     if (!userInfo) {
-      throw new Error('User must be logged in to add items to cart');
+      // Redirect to register page with a return URL
+      const returnUrl = encodeURIComponent(window.location.pathname);
+      window.location.href = `/register?returnTo=${returnUrl}`;
+      return Promise.reject('Redirecting to register');
     }
 
     setLoadingProducts(prev => {
