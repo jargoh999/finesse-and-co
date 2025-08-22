@@ -49,25 +49,11 @@ const PerfumeStack = () => {
   const perfumes: PerfumeProps[] = [
     { 
       id: 1, 
-      src: "/goldea.png", 
+      src: "/logo.jpg", 
       alt: "Goldea Perfume",
       initial: { x: -20, y: -30, rotate: -5, z: 0 },
       hover: { x: -100, y: -50, rotate: -15, z: 50 }
-    },
-    { 
-      id: 2, 
-      src: "/spec1.png", 
-      alt: "Gucci Perfume",
-      initial: { x: 0, y: 0, rotate: 0, z: 20 },
-      hover: { x: 0, y: -100, rotate: 0, z: 100 }
-    },
-    { 
-      id: 3, 
-      src: "/spec2.png", 
-      alt: "Glaciar Perfume",
-      initial: { x: 20, y: 30, rotate: 5, z: 40 },
-      hover: { x: 100, y: -50, rotate: 15, z: 50 }
-    },
+    }
   ];
 
   // Create a function to handle animation variants

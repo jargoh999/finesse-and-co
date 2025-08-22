@@ -39,12 +39,14 @@ interface CartContextType {
   error: string | null;
   userInfo: UserInfo | null;
   hasPreviousCarts: boolean;
+  loadingProducts: Set<string>;
   setUserInfo: (info: UserInfo | null) => Promise<void>;
   addToCart: (productId: string, quantity?: number) => Promise<void>;
   removeFromCart: (productId: string) => Promise<void>;
   updateQuantity: (productId: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
   loadCart: (userInfo: UserInfo) => Promise<void>;
+  setCart: React.Dispatch<React.SetStateAction<CartData | null>>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -53,6 +55,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [cart, setCart] = useState<CartData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingProducts, setLoadingProducts] = useState<Set<string>>(new Set());
   const [userInfo, setUserInfoState] = useState<UserInfo | null>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('cartUserInfo');
@@ -64,8 +67,17 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Load cart when user info changes
   useEffect(() => {
-    if (userInfo) {
-      loadCart(userInfo);
+    // Only load cart if we have user info and we're not already loading
+    if (userInfo?.email && userInfo?.phone && !isLoading) {
+      const loadUserCart = async () => {
+        try {
+          await loadCart(userInfo);
+        } catch (error) {
+          console.error('Failed to load cart:', error);
+        }
+      };
+      
+      loadUserCart();
     }
   }, [userInfo?.email, userInfo?.phone]);
 
@@ -80,8 +92,8 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const loadCart = async (userInfo: UserInfo) => {
-    if (!userInfo?.email || !userInfo?.phone) return;
+  const loadCart = async (userInfo: UserInfo, forceRefresh: boolean = true) => {
+    if (!userInfo?.email || !userInfo?.phone) return null;
     
     setIsLoading(true);
     setError(null);
@@ -89,29 +101,55 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const params = new URLSearchParams({
         email: userInfo.email,
-        phone: userInfo.phone
+        phone: userInfo.phone,
+        t: forceRefresh ? Date.now().toString() : '0' // Always force refresh with timestamp
       });
       
-      const response = await fetch(`/api/cart?${params}`);
-      const data = await response.json();
+      // Force a hard refresh by bypassing all caches
+      const response = await fetch(`/api/cart?${params}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          'X-Requested-With': 'XMLHttpRequest' // Helps identify AJAX requests
+        },
+        credentials: 'same-origin' // Include credentials if needed
+      });
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to load cart');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to load cart');
       }
       
-      setCart(data.cart);
-      setHasPreviousCarts(data.hasPreviousCarts);
+      const data = await response.json();
       
-      // Update user info with any additional data from the server
-      if (data.user) {
-        setUserInfoState(prev => ({
-          ...prev,
-          ...data.user
+      // Only update state if we got valid data
+      if (data && data.cart) {
+        setCart(prevCart => ({
+          ...data.cart,
+          // Ensure items is always an array
+          items: Array.isArray(data.cart.items) ? data.cart.items : []
         }));
+        setHasPreviousCarts(data.hasPreviousCarts || false);
+        
+        // Update user info with any additional data from the server
+        if (data.user) {
+          setUserInfoState(prev => ({
+            ...(prev || {}),
+            ...data.user
+          }));
+        }
+        
+        return data.cart;
       }
+      
+      return null;
     } catch (err) {
       console.error('Error loading cart:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load cart');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load cart';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -119,12 +157,15 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addToCart = async (productId: string, quantity: number = 1) => {
     if (!userInfo) {
-      throw new Error('User information is required');
+      throw new Error('User must be logged in to add items to cart');
     }
-    
-    setIsLoading(true);
-    setError(null);
-    
+
+    setLoadingProducts(prev => {
+      const newSet = new Set(prev);
+      newSet.add(productId);
+      return newSet;
+    });
+
     try {
       const response = await fetch('/api/cart', {
         method: 'POST',
@@ -138,91 +179,166 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           userInfo
         }),
       });
-      
-      const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to add item to cart');
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to add item to cart');
       }
-      
+
+      const data = await response.json();
       setCart(data.cart);
+      return data.cart;
     } catch (err) {
-      console.error('Error adding to cart:', err);
       setError(err instanceof Error ? err.message : 'Failed to add item to cart');
       throw err;
     } finally {
-      setIsLoading(false);
+      setLoadingProducts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(productId);
+        return newSet;
+      });
     }
   };
 
-  const removeFromCart = async (productId: string) => {
-    if (!userInfo) return;
+  const removeFromCart = async (cartItemId: string) => {
+    if (!userInfo) {
+      throw new Error('User not authenticated');
+    }
     
-    setIsLoading(true);
-    setError(null);
-    
+    // Find the cart item to be removed
+    const itemToRemove = cart?.items.find(item => item._id === cartItemId);
+    if (!itemToRemove) {
+      throw new Error('Item not found in cart');
+    }
+
+    // Set loading state for this cart item
+    setLoadingProducts(prev => new Set(prev).add(cartItemId));
+
     try {
+      // Optimistically update the UI first
+      setCart(prevCart => {
+        if (!prevCart) return null;
+        return {
+          ...prevCart,
+          items: prevCart.items.filter(item => item._id !== cartItemId),
+          itemCount: Math.max(0, prevCart.itemCount - itemToRemove.quantity),
+          total: Math.max(0, prevCart.total - (itemToRemove.price * itemToRemove.quantity))
+        };
+      });
+
+      // Then make the API call
       const response = await fetch('/api/cart', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'remove',
-          productId,
+          productId: cartItemId, // This is actually the cart item ID
           userInfo
         }),
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to remove item from cart');
+        // Revert optimistic update if API call fails
+        setCart(cart);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to remove item from cart');
       }
       
+      // Get the updated cart from the response
+      const data = await response.json();
       setCart(data.cart);
+      return data.cart;
     } catch (err) {
       console.error('Error removing from cart:', err);
-      setError(err instanceof Error ? err.message : 'Failed to remove item from cart');
-      throw err;
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove item from cart';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     } finally {
-      setIsLoading(false);
+      // Clear loading state for this product
+      setLoadingProducts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(cartItemId);
+        return newSet;
+      });
     }
   };
 
-  const updateQuantity = async (productId: string, quantity: number) => {
-    if (!userInfo) return;
+  const updateQuantity = async (cartItemId: string, newQuantity: number) => {
+    if (!userInfo || !cart) return;
     
-    setIsLoading(true);
-    setError(null);
+    // Find the cart item
+    const cartItem = cart.items.find(item => item._id === cartItemId);
+    if (!cartItem) return;
+    
+    // Don't allow negative quantities or same quantity
+    if (newQuantity < 1 || cartItem.quantity === newQuantity) return;
+    
+    setLoadingProducts(prev => new Set(prev).add(cartItemId));
+
+    // Save current cart for potential rollback using deep clone
+    const previousCart = JSON.parse(JSON.stringify(cart));
     
     try {
-      const response = await fetch('/api/cart', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'update',
-          productId,
-          quantity,
-          userInfo
-        }),
+      // 1. Create updated items array
+      const updatedItems = cart.items.map(item => 
+        item._id === cartItemId 
+          ? { ...item, quantity: newQuantity }
+          : item
+      );
+      
+      // 2. Calculate new values
+      const newTotal = updatedItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+      const newItemCount = updatedItems.reduce((sum, item) => sum + item.quantity, 0);
+      
+      // 3. Create a single updated cart object
+      const updatedCart = {
+        ...cart,
+        items: updatedItems,
+        itemCount: newItemCount,
+        total: newTotal
+      };
+
+      // 4. Update state once with the new cart
+      setCart(updatedCart);
+
+      // 5. Update server using the new API endpoint
+      const response = await fetch(`/api/cart/items/${cartItemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity: newQuantity })
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to update cart');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to update quantity');
       }
       
-      setCart(data.cart);
+      // 6. Get the updated data from server
+      const data = await response.json();
+      
+      // 7. Only update if there's a difference from our optimistic update
+      if (data.success && data.cart && 
+          (data.cart.total !== newTotal || data.cart.itemCount !== newItemCount)) {
+        setCart(prev => ({
+          ...prev!,
+          total: data.cart.total,
+          itemCount: data.cart.itemCount,
+          items: prev?.items || []
+        }));
+      }
     } catch (err) {
       console.error('Error updating cart:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update cart');
-      throw err;
+      // Revert to previous cart state on error
+      setCart(previousCart);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update cart';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     } finally {
-      setIsLoading(false);
+      setLoadingProducts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(cartItemId);
+        return newSet;
+      });
     }
   };
 
@@ -268,12 +384,14 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         error,
         userInfo,
         hasPreviousCarts,
+        loadingProducts,
         setUserInfo,
         addToCart,
         removeFromCart,
         updateQuantity,
         clearCart,
         loadCart,
+        setCart, // Add setCart to the context value
       }}
     >
       {children}

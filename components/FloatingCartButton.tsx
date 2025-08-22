@@ -32,12 +32,14 @@ export default function FloatingCartButton({ onClick, className = '' }: Floating
         className="w-full py-3 px-4 text-blue-900 font-semibold rounded-full bg-gradient-to-r from-amber-300 via-amber-100 to-amber-300 hover:from-amber-200 hover:to-amber-100 transition-all duration-300 border-2 border-amber-200/50 relative z-10 shadow-lg flex items-center justify-center"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
+        animate={isAnimating ? { scale: [1, 1.05, 1] } : {}}
+        transition={{ duration: 0.3 }}
       >
         <ShoppingCart className="w-5 h-5" />
         <AnimatePresence>
-          {cart?.items.length > 0 && (
+          {cart?.items?.length > 0 && (
             <motion.span
-              key={cart?.items.length}
+              key={cart?.items?.length}
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ 
                 scale: isAnimating ? [1, 1.5, 1] : 1,
@@ -52,7 +54,7 @@ export default function FloatingCartButton({ onClick, className = '' }: Floating
               }}
               className="absolute -top-2 -right-2 bg-pink-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold"
             >
-              {itemCount}
+              {cart?.items.length}
             </motion.span>
           )}
         </AnimatePresence>

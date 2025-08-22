@@ -1,6 +1,11 @@
-import mongoose from 'mongoose';
+import mongoose, { Schema, Document, Model } from 'mongoose';
 
-const cartItemSchema = new mongoose.Schema({
+export const cartItemSchema = new Schema({
+  cart: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Cart',
+    required: true
+  },
   product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Product',
@@ -23,7 +28,7 @@ const cartItemSchema = new mongoose.Schema({
 });
 
 // Virtual for getting the subtotal
-cartItemSchema.virtual('subtotal').get(function() {
+cartItemSchema.virtual('subtotal').get(function () {
   return this.quantity * this.price;
 });
 
@@ -31,5 +36,19 @@ cartItemSchema.virtual('subtotal').get(function() {
 cartItemSchema.set('toJSON', { virtuals: true });
 cartItemSchema.set('toObject', { virtuals: true });
 
-export const CartItem = mongoose.models.CartItem || mongoose.model('CartItem', cartItemSchema);
-export type ICartItem = mongoose.InferSchemaType<typeof cartItemSchema>;
+// Define the CartItem document interface
+export interface ICartItem extends Document {
+  product: mongoose.Types.ObjectId;
+  quantity: number;
+  price: number;
+  addedAt: Date;
+  subtotal: number;
+}
+
+// Define the CartItem model interface
+export interface ICartItemModel extends Model<ICartItem> { }
+
+// Create and export the model
+const CartItem: ICartItemModel = mongoose.models.CartItem || mongoose.model<ICartItem, ICartItemModel>('CartItem', cartItemSchema);
+
+export default CartItem;

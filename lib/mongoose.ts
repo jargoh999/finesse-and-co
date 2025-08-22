@@ -1,5 +1,11 @@
 import mongoose from 'mongoose';
 
+// Import models to ensure they're registered
+import '../models/User';
+import '../models/Product';
+import '../models/CartItem';
+import '../models/Cart';
+
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/rayo';
 
 if (!MONGODB_URI) {
@@ -30,6 +36,11 @@ export async function connectToDB() {
     };
 
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+      // Ensure all models are registered after connection
+      require('../models/User');
+      require('../models/Product');
+      require('../models/CartItem');
+      require('../models/Cart');
       return mongoose;
     });
   }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
@@ -34,8 +35,8 @@ const container = {
 
 const item = {
   hidden: { opacity: 0, y: 20 },
-  show: { 
-    opacity: 1, 
+  show: {
+    opacity: 1,
     y: 0,
     transition: {
       type: 'spring',
@@ -95,11 +96,30 @@ export default function CategoriesPage() {
       </div>
     );
   }
-  
+
+  const router = useRouter();
+
+  const handleGoBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/');
+    }
+  };
+
   return (
     <div className={`min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-pink-50 to-white ${montserrat.variable} font-sans`}>
       <div className="max-w-7xl mx-auto">
-        <motion.div 
+        <button
+          onClick={handleGoBack}
+          className="flex items-center text-pink-600 hover:text-pink-800 mb-8 transition-colors text-sm font-medium"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to previous page
+        </button>
+        <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
@@ -113,16 +133,16 @@ export default function CategoriesPage() {
           </p>
         </motion.div>
 
-        <motion.div 
+        <motion.div
           variants={container}
           initial="hidden"
           animate="show"
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8"
         >
-                  {categories.map((category, index) => (
-              //@ts-ignore
+          {categories.map((category, index) => (
+            //@ts-ignore
             <motion.div key={category.name} variants={item}>
-              <Link 
+              <Link
                 href={`/collection?category=${category.name}`}
                 className="group block h-full"
               >

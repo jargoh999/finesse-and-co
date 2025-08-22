@@ -1,11 +1,19 @@
 'use client';
 
 import Image from 'next/image';
-import { ShoppingCart, Star, ChevronRight, Check } from 'lucide-react';
+import { ShoppingCart, Star, ChevronRight, Check, Loader2, ShoppingBag } from 'lucide-react';
+import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useCart } from '@/contexts/CartContext';
 import { useState, useEffect } from 'react';
-import UserInfoPopup, { UserInfo } from './UserInfoPopup';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+
+interface UserInfo {
+  name: string;
+  email: string;
+  phone: string;
+}
 
 export interface ProductDetails {
   topNotes?: string[];
@@ -38,62 +46,88 @@ interface ProductCardProps {
   onClick?: () => void;
 }
 
+const COLORS = [
+  { value: 'red', label: 'Red' },
+  { value: 'blue', label: 'Blue' },
+  { value: 'green', label: 'Green' },
+];
+
 export default function ProductCard({ product, onClick }: ProductCardProps) {
-  const { addToCart, isLoading, userInfo, setUserInfo } = useCart();
-  const [showUserInfoPopup, setShowUserInfoPopup] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const { cart, addToCart, loadingProducts, userInfo, setUserInfo } = useCart();
+  const router = useRouter();
+  const [selectedColor, setSelectedColor] = useState(COLORS[0].value);
   const [isInCart, setIsInCart] = useState(false);
+  const isProcessing = loadingProducts.has(product._id);
 
   // Check if this product is already in the cart
   useEffect(() => {
-    if (userInfo) {
-      // This would be set based on the actual cart data
-      // For now, we'll assume it's not in the cart
+    if (userInfo && cart?.items) {
+      const inCart = cart.items.some(item => item.product._id === product._id);
+      setIsInCart(inCart);
+    } else {
       setIsInCart(false);
     }
-  }, [userInfo]);
+  }, [userInfo, cart]);
 
-  const handleAddToCartClick = async (e: React.MouseEvent) => {
+  const handleAddToCart = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    e.preventDefault();
-    
+
+    if (isProcessing) return; // Prevent multiple clicks
+
+    if (!userInfo) {
+      // Redirect to registration with product ID for adding after login
+      const returnUrl = encodeURIComponent('/categories');
+      router.push(`/register?productId=${product._id}&redirect=${returnUrl}`);
+      return;
+    }
+
+    if (isInCart) {
+      router.push('/cart');
+      return;
+    }
+
     try {
-      if (userInfo) {
-        // User info exists, add to cart directly
-        await addToCart(product._id, 1);
-      } else {
-        // Show user info popup
-        setShowUserInfoPopup(true);
+      // Show loading state
+      const updatedCart = await addToCart(product._id, 1);
+
+      // Only update UI state if the cart was updated successfully
+      if (updatedCart) {
+        toast.success('Added to cart');
+        setIsInCart(true);
       }
     } catch (error) {
       console.error('Error adding to cart:', error);
-      // Error is already handled by CartContext
+      toast.error('Failed to add to cart');
     }
   };
 
   const handleUserInfoSubmit = async (info: UserInfo) => {
     try {
-      setIsProcessing(true);
-      
       // Set user info and wait for it to be saved
       await setUserInfo(info);
-      
+
       // Add to cart with the product ID
       await addToCart(product._id, 1);
-      
-      setShowUserInfoPopup(false);
     } catch (error) {
       console.error('Error processing cart:', error);
       // Error is already handled by CartContext
-    } finally {
-      setIsProcessing(false);
+    }
+  };
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't trigger card click if clicking on the View Details link
+    if ((e.target as HTMLElement).closest('a, button')) {
+      return;
+    }
+    if (onClick) {
+      onClick();
     }
   };
 
   return (
-    <div 
+    <div
       className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow h-full flex flex-col cursor-pointer"
-      onClick={onClick}
+      onClick={handleCardClick}
     >
       {/* Product Image */}
       <div className="relative h-48 w-full bg-gray-50">
@@ -110,7 +144,7 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
           </div>
         )}
       </div>
-      
+
       {/* Product Info */}
       <div className="p-3 flex-1 flex flex-col">
         <div className="flex-1">
@@ -120,7 +154,7 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
           <p className="text-xs sm:text-sm text-gray-500 mb-2 line-clamp-2">
             {product.description}
           </p>
-          
+
           {/* Product Details */}
           <div className="space-y-1 text-xs text-gray-600 mt-2">
             <div className="flex items-center">
@@ -148,33 +182,61 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
             )}
           </div>
         </div>
-        
+
         {/* Action Buttons */}
         <div className="mt-3 pt-2 border-t border-gray-100 flex justify-between items-center">
-          <div 
-            className="text-xs sm:text-sm text-pink-600 hover:text-pink-700 font-medium flex items-center"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.location.href = `/products/${product.id}`;
-            }}
-          >
-            <span>View Details</span>
-            <ChevronRight className="w-4 h-4 ml-1" />
+          <div className="relative z-10">
+            <Link
+              href={`/products/${product._id || product.id}`}
+              className="text-xs sm:text-sm text-pink-600 hover:text-pink-700 font-medium flex items-center relative z-20"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.nativeEvent.stopImmediatePropagation();
+              }}
+            >
+              <span>View Details</span>
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Link>
           </div>
           <div className="relative">
-            <button 
-              className="text-white text-xs sm:text-sm px-3 py-1.5 rounded-full bg-gray-400 cursor-not-allowed flex items-center"
-              disabled={true}
-            >
-              <span>Coming Soon</span>
-            </button>
-            
-            <UserInfoPopup
-              isOpen={showUserInfoPopup}
-              onClose={() => setShowUserInfoPopup(false)}
-              onContinue={handleUserInfoSubmit}
-              productName={product.title}
-            />
+            {isInCart ? (
+              <button
+                onClick={handleAddToCart}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors bg-gradient-to-r from-amber-300 via-amber-100 to-amber-300 hover:from-amber-200 hover:to-amber-100 text-blue-900 border-2 border-amber-200/50"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                View in Cart
+              </button>
+            ) : (
+              <motion.button
+                onClick={handleAddToCart}
+                disabled={isProcessing}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                animate={{
+                  y: [0, -5, 0],
+                  transition: {
+                    duration: 2,
+                    repeat: Infinity,
+                    repeatType: 'loop',
+                    ease: 'easeInOut'
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-lg"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="w-4 h-4" />
+                    Add to Cart
+                  </>
+                )}
+              </motion.button>
+            )}
           </div>
         </div>
       </div>

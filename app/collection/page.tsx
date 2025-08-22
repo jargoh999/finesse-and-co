@@ -3,7 +3,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { Filter, X, Menu, Home, ShoppingBag, Video, ArrowRight, MessageCircle, ChevronLeft, ChevronRight, Star, ShoppingCart } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useCart } from '@/contexts/CartContext';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import WhatsAppButton from '@/components/WhatsAppButton';
@@ -23,6 +24,7 @@ const FallingFlowers = dynamic(() => import('@/components/FallingFlowers'), {
   ssr: false,
 });
 import Image from 'next/image';
+// Using Button from @/components/ui/button which is already imported
 
 // API Response Type
 interface ApiResponse {
@@ -161,6 +163,8 @@ const ProductModal = ({
 
 export default function CollectionPage() {
   // Get category from URL if it exists
+  const router = useRouter();
+  const { cart, addToCart, removeFromCart, updateQuantity } = useCart();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   
   // Update selected category when URL changes
@@ -425,13 +429,19 @@ export default function CollectionPage() {
                 <Video className="w-4 h-4 mr-2" />
                 Gallery
               </Link>
-              <FloatingCartButton className="ml-2" />
+              <FloatingCartButton 
+                className="fixed bottom-8 right-8 z-50" 
+                onClick={() => router.push('/cart')}
+              />
             </nav>
             
             {/* Mobile Menu Button */}
             <div className="lg:hidden">
               <div className="flex items-center space-x-2">
-                <FloatingCartButton className="mr-2" />
+                <FloatingCartButton 
+                  className="ml-2" 
+                  onClick={() => router.push('/cart')}
+                />
                 <a
                   href="https://wa.me/2348124139608?text=Hello!%20I'm%20interested%20in%20your%20products"
                   target="_blank"
@@ -449,14 +459,12 @@ export default function CollectionPage() {
                     />
                   </div>
                 </a>
-                <Button
-                  variant="ghost"
-                  size="icon"
+                <button
                   onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                   className="md:hidden"
                 >
                   <Menu className="h-6 w-6" />
-                </Button>
+                </button>
               </div>
             </div>
 
