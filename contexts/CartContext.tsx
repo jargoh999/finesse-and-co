@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export interface CartItem {
@@ -170,6 +170,22 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     try {
+      // First, fetch the product to get its details
+      const productResponse = await fetch(`/api/products/${productId}`);
+      if (!productResponse.ok) {
+        throw new Error('Failed to fetch product details');
+      }
+      const productData = await productResponse.json();
+      const product = productData.data;
+      
+      if (!product || !product.price) {
+        throw new Error('Invalid product data received');
+      }
+
+      // Calculate the price to add
+      const priceToAdd = product.price * quantity;
+      
+      // Update the cart with the new item
       const response = await fetch('/api/cart', {
         method: 'POST',
         headers: {
@@ -179,6 +195,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           action: 'add',
           productId,
           quantity,
+          price: product.price,
           userInfo
         }),
       });
@@ -189,8 +206,25 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       const data = await response.json();
-      setCart(data.cart);
-      return data.cart;
+      
+      // Ensure we have a valid cart response
+      if (!data.cart || !Array.isArray(data.cart.items)) {
+        throw new Error('Invalid cart data received');
+      }
+      
+      // Calculate the total based on all items in the cart
+      const calculatedTotal = data.cart.items.reduce((sum: number, item: CartItem) => {
+        return sum + (item.quantity * item.price);
+      }, 0);
+      
+      // Update the cart with the calculated total
+      const updatedCart = {
+        ...data.cart,
+        total: parseFloat(calculatedTotal.toFixed(2)) // Ensure we don't have floating point precision issues
+      };
+      
+      setCart(updatedCart);
+      return updatedCart;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add item to cart');
       throw err;
@@ -266,6 +300,9 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // Store the timeout ID for debouncing
+  const updateTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
+
   const updateQuantity = async (cartItemId: string, newQuantity: number) => {
     if (!userInfo || !cart) return;
     
@@ -276,9 +313,15 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Don't allow negative quantities or same quantity
     if (newQuantity < 1 || cartItem.quantity === newQuantity) return;
     
+    // Clear any pending updates for this item
+    if (updateTimeoutsRef.current[cartItemId]) {
+      clearTimeout(updateTimeoutsRef.current[cartItemId]);
+    }
+
+    // Set loading state for this cart item
     setLoadingProducts(prev => new Set(prev).add(cartItemId));
 
-    // Save current cart for potential rollback using deep clone
+    // Save current cart for potential rollback
     const previousCart = JSON.parse(JSON.stringify(cart));
     
     try {
@@ -301,47 +344,57 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         total: newTotal
       };
 
-      // 4. Update state once with the new cart
+      // 4. Update state immediately for instant feedback
       setCart(updatedCart);
 
-      // 5. Update server using the new API endpoint
-      const response = await fetch(`/api/cart/items/${cartItemId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity: newQuantity })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to update quantity');
-      }
-      
-      // 6. Get the updated data from server
-      const data = await response.json();
-      
-      // 7. Only update if there's a difference from our optimistic update
-      if (data.success && data.cart && 
-          (data.cart.total !== newTotal || data.cart.itemCount !== newItemCount)) {
-        setCart(prev => ({
-          ...prev!,
-          total: data.cart.total,
-          itemCount: data.cart.itemCount,
-          items: prev?.items || []
-        }));
-      }
+      // 5. Debounce the API call to avoid rapid successive requests
+      updateTimeoutsRef.current[cartItemId] = setTimeout(async () => {
+        try {
+          const response = await fetch(`/api/cart/items/${cartItemId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quantity: newQuantity })
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Failed to update quantity');
+          }
+          
+          // Get the updated data from server
+          const data = await response.json();
+          
+          // Only update if there's a difference from our optimistic update
+          if (data.success && data.cart && 
+              (data.cart.total !== newTotal || data.cart.itemCount !== newItemCount)) {
+            setCart(prev => ({
+              ...prev!,
+              total: data.cart.total,
+              itemCount: data.cart.itemCount,
+              items: prev?.items || []
+            }));
+          }
+        } catch (err) {
+          console.error('Error updating cart:', err);
+          // Revert to previous cart state on error
+          setCart(previousCart);
+          const errorMessage = err instanceof Error ? err.message : 'Failed to update cart';
+          setError(errorMessage);
+        } finally {
+          setLoadingProducts(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(cartItemId);
+            return newSet;
+          });
+        }
+      }, 300); // 300ms debounce delay
+
     } catch (err) {
-      console.error('Error updating cart:', err);
-      // Revert to previous cart state on error
+      console.error('Error in optimistic update:', err);
       setCart(previousCart);
       const errorMessage = err instanceof Error ? err.message : 'Failed to update cart';
       setError(errorMessage);
       throw new Error(errorMessage);
-    } finally {
-      setLoadingProducts(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(cartItemId);
-        return newSet;
-      });
     }
   };
 

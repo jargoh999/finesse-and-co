@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
 
           // Add to cart's items array
           cart.items.push(newItem._id);
+
           await cart.save();
         }
 
@@ -109,8 +110,19 @@ export async function POST(req: NextRequest) {
             populate: { path: 'product' }
           });
 
-        // Update the cart reference
+        // Calculate the new total based on all items in the cart
         if (updatedCartData) {
+          const populatedItems = updatedCartData.items as any[];
+          const newTotal = populatedItems.reduce((total, item) => {
+            return total + (item.quantity * item.price);
+          }, 0);
+
+          // Update the cart total and item count
+          updatedCartData.total = parseFloat(newTotal.toFixed(2));
+          updatedCartData.itemCount = populatedItems.reduce((count, item) => count + item.quantity, 0);
+          await updatedCartData.save();
+
+          // Update the cart reference
           cart = updatedCartData;
         }
         break;
