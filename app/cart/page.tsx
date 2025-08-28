@@ -63,7 +63,7 @@ function CartPageInner() {
   // All hooks must be called unconditionally at the top level
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   // Get cart context
   const {
     cart,
@@ -89,7 +89,7 @@ function CartPageInner() {
     itemCount: 0,
     total: 0
   });
-  
+
   const redirect = searchParams?.get('redirect') || '/categories';
   const isAuthenticated = !!userInfo;
 
@@ -111,7 +111,7 @@ function CartPageInner() {
           setIsLoading(false);
         }
       };
-      
+
       loadCartData();
     } else if (isClient && !userInfo) {
       // If no user info, redirect to register
@@ -130,7 +130,7 @@ function CartPageInner() {
         itemCount: cart.itemCount || 0,
         total: cart.total || 0
       });
-      
+
       // Update colors when cart items change
       if (cart.items) {
         const initialColors = { ...selectedColors };
@@ -171,7 +171,7 @@ function CartPageInner() {
       </div>
     );
   }
-  
+
   // Don't render anything if not authenticated (redirect will happen in useEffect)
   if (!isAuthenticated) {
     return null;
