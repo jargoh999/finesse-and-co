@@ -1,5 +1,4 @@
 'use client';
-
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -10,11 +9,18 @@ export interface CartItem {
     title: string;
     price: number;
     images: string[];
+    specifications?: Record<string, any>;
   };
   quantity: number;
   price: number;
+  specifications?: {
+    color?: string;
+    size?: string;
+    bodySize?: string;
+    numericSize?: string;
+    [key: string]: any;
+  };
 }
-
 export interface CartData {
   _id: string;
   items: CartItem[];
@@ -26,13 +32,11 @@ export interface CartData {
     phone: string;
   };
 }
-
 export interface UserInfo {
   email: string;
   phone: string;
   name?: string;
 }
-
 interface CartContextType {
   cart: CartData | null;
   isLoading: boolean;
@@ -48,11 +52,16 @@ interface CartContextType {
   loadCart: (userInfo: UserInfo) => Promise<void>;
   setCart: React.Dispatch<React.SetStateAction<CartData | null>>;
 }
-
 const CartContext = createContext<CartContextType | undefined>(undefined);
-
 export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [cart, setCart] = useState<CartData | null>(null);
+  const [cart, setCart] = useState<CartData | null>(() => {
+    // Initialize with empty cart if none exists
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('cart');
+      return saved ? JSON.parse(saved) : { items: [], itemCount: 0, total: 0 };
+    }
+    return { items: [], itemCount: 0, total: 0 };
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingProducts, setLoadingProducts] = useState<Set<string>>(new Set());
@@ -64,6 +73,13 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return null;
   });
   const [hasPreviousCarts, setHasPreviousCarts] = useState(false);
+  
+  // Save cart to localStorage whenever it changes
+  useEffect(() => {
+    if (cart && typeof window !== 'undefined') {
+      localStorage.setItem('cart', JSON.stringify(cart));
+    }
+  }, [cart]);
 
   // Load cart when user info changes
   useEffect(() => {
@@ -76,11 +92,9 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           console.error('Failed to load cart:', error);
         }
       };
-      
       loadUserCart();
     }
   }, [userInfo?.email, userInfo?.phone]);
-
   const setUserInfo = async (info: UserInfo | null) => {
     if (info) {
       localStorage.setItem('cartUserInfo', JSON.stringify(info));
@@ -121,9 +135,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to load cart');
       }
-      
       const data = await response.json();
-      
       // Only update state if we got valid data
       if (data && data.cart) {
         setCart(prevCart => ({
@@ -131,8 +143,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // Ensure items is always an array
           items: Array.isArray(data.cart.items) ? data.cart.items : []
         }));
-        setHasPreviousCarts(data.hasPreviousCarts || false);
-        
+        setHasPreviousCarts(data.hasPreviousCarts || false);       
         // Update user info with any additional data from the server
         if (data.user) {
           setUserInfoState(prev => ({

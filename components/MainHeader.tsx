@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { ShoppingCart, Menu } from 'lucide-react';
+import { ShoppingCart, Menu, Package } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import AnimatedProductSearch from './AnimatedProductSearch';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 
 const navigation = [
@@ -16,10 +16,34 @@ const navigation = [
 ];
 
 export default function MainHeader() {
-    const { cart } = useCart();
+    const { cart, userInfo } = useCart();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [hasOrders, setHasOrders] = useState(false);
     const pathname = usePathname();
     const itemCount = cart?.items?.reduce((total, item) => total + item.quantity, 0) || 0;
+
+    useEffect(() => {
+        // Check if user has any orders
+        const checkOrders = async () => {
+            if (userInfo?.email && userInfo?.phone) {
+                try {
+                    const params = new URLSearchParams({
+                        email: userInfo.email,
+                        phone: userInfo.phone,
+                    });
+                    const response = await fetch(`/api/orders?${params}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        setHasOrders(data.orders?.length > 0);
+                    }
+                } catch (error) {
+                    console.error('Error checking orders:', error);
+                }
+            }
+        };
+
+        checkOrders();
+    }, [userInfo?.email, userInfo?.phone]);
 
     return (
         <header className="bg-white shadow-sm sticky top-0 z-40">
@@ -34,17 +58,25 @@ export default function MainHeader() {
 
                     {/* Desktop Navigation */}
                     <div className="hidden md:flex md:items-center md:space-x-8">
-                        <div className="hidden space-x-8 lg:flex">
-                            {navigation.map((item) => (
+                        <div className="hidden ml-10 space-x-8 lg:flex items-center">
+                            {navigation.map((link) => (
                                 <Link
-                                    key={item.name}
-                                    href={item.href}
-                                    className={`text-base font-medium ${pathname === item.href ? 'text-pink-600' : 'text-gray-700 hover:text-pink-500'
-                                        }`}
+                                    key={link.name}
+                                    href={link.href}
+                                    className={`text-sm font-medium ${pathname === link.href ? 'text-pink-600' : 'text-gray-700 hover:text-pink-600'}`}
                                 >
-                                    {item.name}
+                                    {link.name}
                                 </Link>
                             ))}
+                            {userInfo?.email && hasOrders && (
+                                <Link
+                                    href="/orders"
+                                    className={`text-sm font-medium flex items-center ${pathname === '/orders' ? 'text-pink-600' : 'text-gray-700 hover:text-pink-600'}`}
+                                >
+                                    <Package className="h-4 w-4 mr-1.5" />
+                                    My Orders
+                                </Link>
+                            )}
                         </div>
                     </div>
 

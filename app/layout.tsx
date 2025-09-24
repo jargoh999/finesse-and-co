@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Alex_Brush } from "next/font/google";
 import "./globals.css";
 import { CartProvider } from "@/contexts/CartContext";
+import FloatingOrderButton from "@/components/FloatingOrderButton";
 
 // Load Alex Brush - an elegant, flowing script font
 const alexBrush = Alex_Brush({
@@ -26,6 +27,7 @@ export default function RootLayout({
       <body className={`${alexBrush.className} antialiased`}>
         <CartProvider>
           {children}
+          <FloatingOrderButton />
         </CartProvider>
       </body>
     </html>

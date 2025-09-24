@@ -3,11 +3,9 @@
 import { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useCart, type CartData, type CartItem, type UserInfo } from '@/contexts/CartContext';
 import Image from 'next/image';
 import { Trash2, ArrowLeft, ShoppingBag, Plus, Minus, Loader2, RefreshCw, ChevronDown, ChevronUp, Check } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +13,6 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { Inter } from 'next/font/google';
-
 // Create a wrapper component to handle Suspense
 function CartPageContent() {
   return (
