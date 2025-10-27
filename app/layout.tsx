@@ -1,35 +1,53 @@
-import type { Metadata } from "next";
-import { Alex_Brush } from "next/font/google";
-import "./globals.css";
-import { CartProvider } from "@/contexts/CartContext";
-import FloatingOrderButton from "@/components/FloatingOrderButton";
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import '../styles/globals.css';
+import { Providers } from '@/app/providers';
 
-// Load Alex Brush - an elegant, flowing script font
-const alexBrush = Alex_Brush({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-alex-brush",
-  weight: "400",
-});
+import { AssistantButton } from '@/components/AssistantButton';
+import { AutoSaveUserData } from '@/components/AutoSaveUserData';
+import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration';
+import { SecurityFeatures } from '@/components/SecurityFeatures';
+
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: "Finesse & Co..",
-  description: "Experience the essence of luxury",
+    title: 'Szecurium - Elite Digital Security Vault',
+    description: 'Your personal fortress of digital security. Military-grade encryption, zero-trust architecture, and premium privacy protection.',
+    viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
+    manifest: '/manifest.json',
+    themeColor: '#f59e0b',
+    appleWebApp: {
+        capable: true,
+        statusBarStyle: 'black',
+        title: 'Szecurium',
+    },
 };
 
 export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="en" className={alexBrush.variable}>
-      <body className={`${alexBrush.className} antialiased`}>
-        <CartProvider>
-          {children}
-          <FloatingOrderButton />
-        </CartProvider>
-      </body>
-    </html>
-  );
+    children,
+}: {
+    children: React.ReactNode;
+}) {
+    return (
+        <html lang="en" suppressHydrationWarning>
+            <head>
+                <link rel="manifest" href="/manifest.json" />
+                <meta name="theme-color" content="#f59e0b" />
+                <meta name="mobile-web-app-capable" content="yes" />
+                <meta name="apple-mobile-web-app-capable" content="yes" />
+                <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+                <meta name="apple-mobile-web-app-title" content="Szecurium" />
+            </head>
+            <body className={inter.className}>
+                <Providers>
+                    <SecurityFeatures />
+                    {children}
+                    <AssistantButton />
+                    <AutoSaveUserData />
+                    <ServiceWorkerRegistration />
+            
+                </Providers>
+            </body>
+        </html>
+    );
 }

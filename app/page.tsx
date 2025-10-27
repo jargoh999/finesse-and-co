@@ -1,247 +1,292 @@
-"use client"
-import { ShoppingCart, ArrowRight } from "lucide-react"
-import { motion, useMotionValue, useTransform, AnimatePresence } from "framer-motion"
-import dynamic from 'next/dynamic'
-import { useRef, useEffect, useState } from 'react'
-import Link from 'next/link'
+'use client';
 
-// Dynamically import the PerfumeStack component with no SSR to avoid hydration issues
-const PerfumeStack = dynamic(() => import('@/components/PerfumeStack'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-[400px] h-[600px] flex items-center justify-center">
-      <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
-    </div>
-  )
-})
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import {
+  Users,
+  Wifi,
+  FileText,
+  MessageCircle,
+  Settings,
+  Shield,
+  Smartphone,
+  Zap,
+  Key,
+  Vault,
+  Eye,
+  EyeOff,
+  Star,
+  ChevronRight,
+  Crown,
+  Gem,
+  Unlock,
+  Lock
+} from 'lucide-react';
 
-// Removed individual FlowerPetal component as we've moved the logic inline for better performance
-export default function LuxeBeautyHomepage() {
-  const [isMounted, setIsMounted] = useState(false);
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-  
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export default function DashboardPage() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isVaultOpen, setIsVaultOpen] = useState(false);
+  const router = useRouter();
+
   useEffect(() => {
-    setIsMounted(true);
-    
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseX.set(e.clientX);
-      mouseY.set(e.clientY);
-    };
-    
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [mouseX, mouseY]);
-  return (
-    <div className="min-h-screen overflow-hidden bg-gradient-to-br from-white via-blue-50 to-blue-100">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 absolute top-0 left-0 right-0 z-50">
-        <div className="flex items-center gap-3">
-        
-          <span className="text-white text-xl font-semibold bg-gradient-to-r from-pink-100 to-pink-400 via-white-100 bg-clip-text text-pink-400">Finesse & Co..</span>
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch('/api/auth/session');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.authenticated) {
+          setUser(data.user);
+        } else {
+          router.push('/login');
+        }
+      } else {
+        router.push('/login');
+      }
+    } catch (error) {
+      router.push('/login');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+      router.push('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      router.push('/login');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 flex items-center justify-center">
+        <div className="relative">
+          <div className="animate-spin rounded-full h-16 w-16 border-2 border-gold-400 border-t-transparent"></div>
+          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-gold-400/20 to-gold-600/20 animate-pulse"></div>
         </div>
-        {/* <Button className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-full ">
-          <ShoppingCart className="w-4 h-4 mr-2" />
-          Cart
-        </Button> */}
-        <div className="relative w-16 ">
-                    <button
-                        className="w-full py-3 px-4 text-blue-900 font-semibold rounded-full bg-gradient-to-r from-amber-300 via-amber-100 to-amber-300 hover:from-amber-200 hover:to-amber-100 transition-all duration-300 border-2 border-amber-200/50 relative z-10 shadow-lg"
-                    >
-                        <ShoppingCart className="w-7 h-7" />
-          
-                    </button>
-                    <div className="absolute -bottom-2 left-0 right-0 h-[calc(80%-1px)] bg-amber-200/30 rounded-full z-0"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  const features = [
+    {
+      title: 'Contact Vault',
+      description: 'Secure contact management with military-grade encryption',
+      icon: Users,
+      href: '/contacts',
+      color: 'from-gold-400 to-gold-600',
+      bgColor: 'bg-gradient-to-br from-gold-400/10 to-gold-600/10',
+      borderColor: 'border-gold-400/30',
+    },
+    {
+      title: 'Network Safe',
+      description: 'Protected WiFi credentials with biometric access',
+      icon: Shield,
+      href: '/wifi',
+      color: 'from-gold-500 to-amber-500',
+      bgColor: 'bg-gradient-to-br from-gold-500/10 to-amber-500/10',
+      borderColor: 'border-gold-500/30',
+    },
+    {
+      title: 'Secure Notes',
+      description: 'Encrypted notes vault with zero-knowledge architecture',
+      icon: FileText,
+      href: '/secure-notes',
+      color: 'from-amber-400 to-gold-500',
+      bgColor: 'bg-gradient-to-br from-amber-400/10 to-gold-500/10',
+      borderColor: 'border-amber-400/30',
+    },
+    {
+      title: 'Password Vault',
+      description: 'Master password manager with quantum-resistant encryption',
+      icon: Key,
+      href: '/passwords',
+      color: 'from-gold-600 to-amber-600',
+      bgColor: 'bg-gradient-to-br from-gold-600/10 to-amber-600/10',
+      borderColor: 'border-gold-600/30',
+    },
+    {
+      title: 'Private Chat',
+      description: 'End-to-end encrypted AI conversations with privacy focus',
+      icon: MessageCircle,
+      href: '/chat',
+      color: 'from-amber-500 to-gold-400',
+      bgColor: 'bg-gradient-to-br from-amber-500/10 to-gold-400/10',
+      borderColor: 'border-amber-500/30',
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800">
+      {/* Animated Background Pattern */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,_theme(colors.gold.400),_transparent_50%)] opacity-20"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,_theme(colors.amber.400),_transparent_50%)] opacity-20"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_40%_80%,_theme(colors.gold.600),_transparent_50%)] opacity-20"></div>
+      </div>
+
+      {/* Header */}
+      <header className="relative bg-gradient-to-r from-slate-800/80 to-gray-800/80 backdrop-blur-xl border-b border-gold-400/20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-6">
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <div className="w-12 h-12 bg-gradient-to-br from-gold-400 to-gold-600 rounded-xl flex items-center justify-center shadow-2xl shadow-gold-400/25">
+                  <Vault className="w-7 h-7 text-white" />
                 </div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-br from-amber-400 to-gold-500 rounded-full flex items-center justify-center">
+                  <Crown className="w-2.5 h-2.5 text-white" />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-gold-400 via-amber-300 to-gold-500 bg-clip-text text-transparent">
+                  Szecurium
+                </h1>
+                <p className="text-sm text-gray-400 font-medium">Elite Digital Security Vault</p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-6">
+              <div className="text-right">
+                <p className="text-sm font-semibold text-white">{user.name}</p>
+                <p className="text-xs text-gray-400">{user.email}</p>
+              </div>
+
+              {/* Vault Status Indicator */}
+              <div className="flex items-center space-x-2 px-3 py-2 bg-gradient-to-r from-gold-400/10 to-amber-400/10 rounded-lg border border-gold-400/20">
+                <div className={`w-2 h-2 rounded-full ${isVaultOpen ? 'bg-green-400' : 'bg-gold-400'}`}></div>
+                <span className="text-xs text-gray-300 font-medium">
+                  {isVaultOpen ? 'Unlocked' : 'Locked'}
+                </span>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-all duration-200 border border-white/10 hover:border-white/20"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
       </header>
 
-      {/* Hero Section with Dazzling Background */}
-      <section className="relative flex flex-col items-center justify-center min-h-screen overflow-hidden pt-16">
-        {/* Animated Gradient Background */}
-        <motion.div 
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(45deg, #ffffff, #e0f2fe, #bae6fd, #7dd3fc, #38bdf8, #0ea5e9, #0284c7)',
-            backgroundSize: '400% 400%',
-            filter: 'blur(60px)',
-            opacity: 0.7,
-          }}
-          animate={{
-            backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'],
-          }}
-          transition={{
-            duration: 10,
-            ease: 'linear',
-            repeat: Infinity,
-          }}
-        />
-        
-        {/* Title with Glossy Effect */}
-        <motion.div 
-          className="relative z-10 text-center mb-12 group"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-        >
-          <motion.h1 
-            className="text-5xl md:text-7xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-900 via-blue-600 to-pink-400"
-            style={{
-              backgroundSize: '200% auto',
-              textShadow: '0 0 20px rgba(255,255,255,0.3)',
-              WebkitBackgroundClip: 'text',
-            }}
-            animate={{
-              backgroundPosition: ['0% center', '200% center'],
-            }}
-            transition={{
-              duration: 8,
-              ease: 'linear',
-              repeat: Infinity,
-            }}
-          >
-          Finesse & Co..
-          </motion.h1>
-          <motion.p 
-            className="text-xl bg-clip-text text-transparent bg-gradient-to-r from-blue-800 to-pink-400"
-            style={{
-              textShadow: '0 0 15px rgba(255,255,255,0.2)',
-              WebkitBackgroundClip: 'text',
-            }}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ 
-              opacity: 1, 
-              y: 0,
-              textShadow: ['0 0 15px rgba(255,255,255,0.2)', '0 0 30px rgba(255,255,255,0.4)', '0 0 15px rgba(255,255,255,0.2)']
-            }}
-            transition={{ 
-              duration: 3, 
-              repeat: Infinity,
-              repeatType: 'reverse'
-            }}
-          >
-            Experience the essence of luxury
-          </motion.p>
-          
-          {/* Glossy overlay effect */}
-          <motion.div 
-            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 pointer-events-none"
-            style={{
-              transform: 'rotate(-5deg) scale(1.5)',
-              maskImage: 'linear-gradient(75deg, transparent, white, transparent)',
-              WebkitMaskImage: 'linear-gradient(75deg, transparent, white, transparent)',
-            }}
-            transition={{ duration: 0.5 }}
-          />
-        </motion.div>
+      {/* Main Content */}
+      <main className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Hero Section */}
+        <div className="text-center mb-16">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-gold-400/20 to-amber-400/20 rounded-full mb-6 border border-gold-400/30">
+            <Lock className="w-10 h-10 text-gold-400" />
+          </div>
 
-        {/* 3D Perfume Stack */}
-        <div className="relative z-10 mb-7">
-          <PerfumeStack />
+          <h2 className="text-5xl font-bold mb-4 bg-gradient-to-r from-white via-gold-200 to-white bg-clip-text text-transparent">
+            Welcome back, {user.name}
+          </h2>
+
+          <p className="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
+            Your personal fortress of digital security. Every secret, every connection, every credential — protected by military-grade encryption.
+          </p>
+
+          {/* Security Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12 max-w-4xl mx-auto">
+            <div className="bg-gradient-to-br from-slate-800/50 to-gray-800/50 p-6 rounded-xl border border-gold-400/20 backdrop-blur-sm">
+              <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-green-400/20 to-emerald-400/20 rounded-lg mb-3 mx-auto">
+                <Shield className="w-6 h-6 text-green-400" />
+              </div>
+              <div className="text-2xl font-bold text-white mb-1">AES-256</div>
+              <div className="text-sm text-gray-400">Military Grade Encryption</div>
+            </div>
+
+            <div className="bg-gradient-to-br from-slate-800/50 to-gray-800/50 p-6 rounded-xl border border-gold-400/20 backdrop-blur-sm">
+              <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-gold-400/20 to-amber-400/20 rounded-lg mb-3 mx-auto">
+                <Eye className="w-6 h-6 text-gold-400" />
+              </div>
+              <div className="text-2xl font-bold text-white mb-1">Zero Trust</div>
+              <div className="text-sm text-gray-400">Privacy First Architecture</div>
+            </div>
+
+            <div className="bg-gradient-to-br from-slate-800/50 to-gray-800/50 p-6 rounded-xl border border-gold-400/20 backdrop-blur-sm">
+              <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-purple-400/20 to-pink-400/20 rounded-lg mb-3 mx-auto">
+                <Gem className="w-6 h-6 text-purple-400" />
+              </div>
+              <div className="text-2xl font-bold text-white mb-1">Premium</div>
+              <div className="text-sm text-gray-400">Elite Security Experience</div>
+            </div>
+          </div>
         </div>
 
-         <Link href="/categories">
-          <motion.button 
-            className="px-8 py-4 bg-gradient-to-r from-amber-300 via-transparent to-amber-300 text-white rounded-full text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 flex items-center group relative overflow-hidden"
-            whileHover={{ 
-              scale: 1.05,
-              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-            }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <span className="relative z-10 flex items-center">
-              Discover the Collection
-              <motion.span 
-                className="ml-2 inline-block"
-                initial={{ x: 0 }}
-                animate={{ x: [0, 4, 0] }}
-                transition={{ 
-                  repeat: Infinity, 
-                  duration: 1.5,
-                  ease: 'easeInOut'
-                }}
-              >
-                <ArrowRight className="w-5 h-5" />
-              </motion.span>
-            </span>
-            <motion.span 
-              className="absolute inset-0 bg-gradient-to-r from-pink-600 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              initial={{ x: '-100%' }}
-              whileHover={{ x: '0%' }}
-              transition={{ duration: 0.4, ease: 'easeOut' }}
-            />
-          </motion.button>
-        </Link>
+        {/* Features Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {features.map((feature, index) => (
+            <Link
+              key={index}
+              href={feature.href}
+              className="group relative"
+            >
+              <div className={`relative p-8 rounded-2xl border-2 ${feature.bgColor} ${feature.borderColor} hover:border-gold-400/50 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-gold-400/10 backdrop-blur-sm`}>
+                {/* Background Pattern */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 
-        {/* Abundant Falling Petals */}
-        {isMounted && [...Array(150)].map((_, i) => {
-          const size = Math.random() * 30 + 10; // Larger size range
-          const duration = Math.random() * 15 + 15; // Slower falling
-          const delay = Math.random() * 10; // Staggered start
-          const startX = Math.random() * window.innerWidth;
-          const endX = startX + (Math.random() * 400 - 200); // More horizontal movement
-          
-          return (
-            <motion.div
-              key={`flower-${i}`}
-              className={`absolute rounded-full ${Math.random() > 0.5 ? 'bg-pink-200/60' : 'bg-blue-200/60'}`}
-              style={{
-                width: `${size}px`,
-                height: `${size}px`,
-                filter: 'blur(0.5px)',
-                rotate: Math.random() * 360,
-                left: startX,
-                top: -50,
-              }}
-              initial={{
-                y: -100,
-                x: startX,
-                opacity: 0,
-                scale: 0.5,
-              }}
-              animate={{
-                y: window.innerHeight + 100,
-                x: endX,
-                opacity: [0, 0.8, 0.8, 0],
-                scale: [0.5, 1, 0.8, 0],
-                rotate: 360 + (Math.random() * 360),
-              }}
-              transition={{
-                duration: duration,
-                delay: delay,
-                repeat: Infinity,
-                repeatDelay: Math.random() * 5,
-                ease: 'linear',
-              }}
-            />
-          );
-        })}
-        
-        {/* Subtle floating particles - increased quantity */}
-        {[...Array(50)].map((_, i) => (
-          <motion.div
-            key={`particle-${i}`}
-            className={`absolute rounded-full ${Math.random() > 0.5 ? 'bg-pink-200/40' : 'bg-blue-200/40'}`}
-            style={{
-              width: Math.random() * 6 + 2,
-              height: Math.random() * 6 + 2,
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-            }}
-            animate={{
-              y: [0, Math.random() * 200 - 100],
-              x: [0, Math.random() * 200 - 100],
-              opacity: [0.1, 0.6, 0.1],
-            }}
-            transition={{
-              duration: Math.random() * 15 + 15,
-              repeat: Infinity,
-              repeatType: 'reverse',
-              ease: 'easeInOut',
-              delay: Math.random() * 5,
-            }}
-          />
-        ))}
-      </section>
+                {/* Icon */}
+                <div className="relative z-10 mb-6">
+                  <div className={`inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br ${feature.color} rounded-xl shadow-lg`}>
+                    <feature.icon className="w-8 h-8 text-white" />
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="relative z-10">
+                  <h3 className="text-xl font-bold text-white mb-3 group-hover:text-gold-300 transition-colors">
+                    {feature.title}
+                  </h3>
+                  <p className="text-gray-400 text-sm leading-relaxed mb-4">
+                    {feature.description}
+                  </p>
+
+                  {/* Arrow */}
+                  <div className="flex items-center text-gold-400 group-hover:text-amber-300 transition-colors">
+                    <span className="text-sm font-medium">Access Vault</span>
+                    <ChevronRight className="w-4 h-4 ml-2" />
+                  </div>
+                </div>
+
+                {/* Hover Effect Border */}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-gold-400/0 via-gold-400/20 to-amber-400/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+              </div>
+            </Link>
+          ))}
+        </div>
+
+        {/* Premium Footer */}
+        <div className="mt-20 text-center">
+          <div className="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-gold-400/10 to-amber-400/10 rounded-full border border-gold-400/20">
+            <Crown className="w-5 h-5 text-gold-400" />
+            <span className="text-sm font-medium text-gray-300">
+              Szecurium Elite • Premium Security Experience
+            </span>
+            <Star className="w-4 h-4 text-amber-400 fill-current" />
+          </div>
+        </div>
+      </main>
     </div>
-  )
+  );
 }
