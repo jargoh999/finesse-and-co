@@ -43,7 +43,7 @@ export function AssistantButton() {
   };
 
   return (
-    <div className="fixed right-6 top-1/2 transform -translate-y-1/2 z-50">
+    <div className="fixed right-6 top-1/2 transform -translate-y-1/2 z-50 assistant-button">
       <div className="relative">
         {showMenu && (
           <div className="absolute right-0 bottom-full mb-4 w-64 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden transform transition-all duration-300 origin-bottom-right">
@@ -78,7 +78,7 @@ export function AssistantButton() {
               </div>
               <div
                 className="flex items-center justify-between px-4 py-3 text-gray-200 hover:bg-gray-700/80 rounded-lg cursor-pointer transition-colors"
-                onClick={() => handleMenuItemClick('/private-chat')}
+                onClick={() => handleMenuItemClick('/personal-chat')}
               >
                 <div className="flex items-center">
                   <span className="mr-3 text-xl">💬</span>
@@ -103,29 +103,21 @@ export function AssistantButton() {
         )}
         <button
           onClick={() => setShowMenu(!showMenu)}
-          className={`relative w-14 h-14 rounded-full shadow-2xl transition-all duration-300 ${showMenu ? 'rotate-180' : ''}`}
+          className={`relative w-14 h-14 rounded-full transition-all duration-300 ${showMenu ? 'opacity-30' : 'opacity-90 hover:opacity-100'}`}
           style={{
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-            boxShadow: '0 4px 20px rgba(99, 102, 241, 0.4)'
+            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
           }}
           aria-label="Assistant menu"
         >
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="relative w-6 h-6">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6 text-white transition-transform duration-300"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
+            <div className="relative w-8 h-8">
+              <img 
+                src="/logo3333.png" 
+                alt="Assistant" 
+                className={`w-full h-full object-contain transition-transform duration-300 ${showMenu ? 'scale-90' : 'scale-100'}`}
+              />
               {unreadCount > 0 && (
                 <span 
                   className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-bounce"
@@ -145,6 +137,12 @@ export function AssistantButton() {
         @keyframes bounce {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-5px); }
+        }
+        .assistant-button {
+          transition: all 0.3s ease;
+        }
+        .assistant-button:hover {
+          transform: scale(1.05);
         }
       `}</style>
     </div>
