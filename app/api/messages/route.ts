@@ -97,6 +97,13 @@ export async function GET(request: Request) {
       .limit(limit)
       .lean();
 
+    // IMPORTANT: Ensure systemData is included in response for Q&A link button rendering
+    // Transform messages to include all necessary fields including systemData
+    const transformedMessages = messages.map((msg: any) => ({
+      ...msg,
+      systemData: msg.systemData || null
+    }));
+
     // If this is not a pagination request, mark messages as read
     if (!before) {
       //@ts-ignore
@@ -112,7 +119,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      messages: messages.reverse() // Return in chronological order
+      messages: transformedMessages.reverse() // Return in chronological order
     });
   } catch (error) {
     console.error('Error fetching messages:', error);

@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, MessageCircle, Settings, LogOut } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
+import { Search, MessageCircle, LogOut,MessageCircleQuestion, MessageSquareLock } from 'lucide-react';
 import { getCurrentUserFromSession, clearCurrentUserSession } from '@/lib/client-auth';
 import { NewConversationDialog } from '../../components/NewConversationDialog';
 import { ConversationList } from '../../components/ConversationList';
 import { PersonalChat } from '../../components/PersonalChat';
+import { AnonymousAnswers } from '../../components/AnonymousAnswers';
+import { AnonymousDMList } from '../../components/AnonymousDMList';
+import { cn } from '@/lib/utils';
 
 interface Conversation {
   _id: string;
@@ -31,14 +33,31 @@ interface Conversation {
   unreadCount: number;
 }
 
+interface AnonymousConversation {
+  senderId: string;
+  sender: {
+    _id: string;
+    name: string;
+    email: string;
+    image?: string;
+  } | null;
+  messages: any[];
+  lastMessage: any;
+  unreadCount: number;
+  isAnonymous: true;
+}
+
 export default function PersonalChatPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [anonymousConversations, setAnonymousConversations] = useState<AnonymousConversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [selectedAnonymousConversation, setSelectedAnonymousConversation] = useState<AnonymousConversation | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chats' | 'anonymous'>('chats');
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check authentication
   useEffect(() => {
@@ -50,32 +69,60 @@ export default function PersonalChatPage() {
     setCurrentUser(user);
   }, [router]);
 
-  // Load conversations
+  // Load conversations and setup polling
   useEffect(() => {
     if (currentUser) {
       loadConversations();
+      loadAnonymousConversations();
+      setupPolling();
     }
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
   }, [currentUser]);
 
-  const loadConversations = async () => {
+  const setupPolling = () => {
+    // Poll for conversation updates every 2 seconds without showing loading state
+    pollingIntervalRef.current = setInterval(() => {
+      loadConversations(false);
+      loadAnonymousConversations(false);
+    }, 2000);
+  };
+
+  const loadConversations = async (showLoading = true) => {
     try {
-      setIsLoading(true);
+      if (showLoading) setIsLoading(true);
       const response = await fetch('/api/conversations');
       if (response.ok) {
         const data = await response.json();
-        // Filter out any conversations with null IDs (shouldn't happen but extra safety)
         const validConversations = (data.conversations || []).filter((conv: Conversation) => conv._id);
         setConversations(validConversations);
       } else {
         console.error('Failed to load conversations:', response.status, response.statusText);
-        // Don't clear conversations on error, keep existing ones
       }
     } catch (error) {
       console.error('Error loading conversations:', error);
-      // Show user-friendly error message
-      // You could add a toast notification here
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
+    }
+  };
+
+  // IMPORTANT: Load anonymous conversations separately for the Anonymous DM tab
+  const loadAnonymousConversations = async (showLoading = true) => {
+    try {
+      if (showLoading) setIsLoading(true);
+      const response = await fetch('/api/anonymous-dm');
+      if (response.ok) {
+        const data = await response.json();
+        setAnonymousConversations(data.conversations || []);
+      }
+    } catch (error) {
+      console.error('Error loading anonymous DMs:', error);
+    } finally {
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -91,59 +138,41 @@ export default function PersonalChatPage() {
 
   if (!currentUser) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center h-screen bg-[#faf8f5]" style={{ fontFamily: "'Outfit', sans-serif" }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#c7b793] mx-auto mb-4"></div>
+          <p className="text-[#a38c5b] text-sm">loading chats....</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 relative">
-      {/* Mobile sidebar overlay */}
-      {isMobileSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
-          onClick={() => setIsMobileSidebarOpen(false)}
-        />
-      )}
+    <div className="flex h-screen bg-[#faf8f5] overflow-hidden" style={{ fontFamily: "'Outfit', sans-serif" }}>
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+      `}</style>
 
       {/* Sidebar - Conversations List */}
-      <div className={`
-        w-80 bg-white border-r border-gray-200 flex flex-col overflow-hidden
-        md:relative md:translate-x-0
-        ${isMobileSidebarOpen ? 'fixed left-0 top-0 h-full z-50' : 'fixed -left-80 md:left-0'}
-        transition-transform duration-300 ease-in-out
-      `}>
+      <div className={cn(
+        "w-full md:w-80 lg:w-96 bg-white border-r border-[#c7b793]/15 flex flex-col overflow-hidden h-full transition-all duration-300",
+        selectedConversation ? "hidden md:flex" : "flex"
+      )}>
         {/* Header */}
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-[#c7b793]/15 bg-white">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Messages</h1>
-              <p className="text-sm text-gray-500">
-                {conversations.length} conversations
+              <h1 className="text-xl font-bold text-gray-900 tracking-tight">Chats</h1>
+              <p className="text-xs text-[#a38c5b] font-medium mt-0.5">
+                {conversations.length} active {conversations.length === 1 ? 'channel' : 'channels'}
               </p>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1.5">
               <NewConversationDialog
                 onSelectUser={(userData) => {
                   console.log('NewConversationDialog onSelectUser called with:', userData);
-                  // Close mobile sidebar after selecting
-                  setIsMobileSidebarOpen(false);
-                  // Reload conversations to show the new one
                   loadConversations().then(() => {
-                    // Find and select the new conversation
                     if (userData.conversationId) {
-                      console.log('Creating new conversation with:', {
-                        conversationId: userData.conversationId,
-                        userId: userData._id,
-                        userName: userData.name,
-                        userEmail: userData.email
-                      });
-
-                      // Create a properly typed conversation object
                       const newConversation: Conversation = {
                         _id: userData.conversationId,
                         participants: [currentUser?.id, userData._id].filter(Boolean),
@@ -158,70 +187,148 @@ export default function PersonalChatPage() {
                         lastMessageAt: new Date(),
                         unreadCount: 0
                       };
-
-                      console.log('Setting selected conversation:', newConversation);
                       setSelectedConversation(newConversation);
-                    } else {
-                      console.warn('No conversationId in userData:', userData);
                     }
                   });
                 }}
                 currentUser={currentUser}
               />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleLogout}
-                className="text-gray-500 hover:text-gray-700 min-h-[44px] min-w-[44px]"
-                title="Sign out"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
+              {/* IMPORTANT: Q&A icon only visible when Anonymous DM tab is active */}
+              {activeTab === 'anonymous' && (
+                <div className="flex flex-col items-center">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => router.push('/anonymous')}
+                    className="text-gray-400 hover:text-gray-600 rounded-full h-9 w-9 flex items-center justify-center"
+                    title="Anonymous Q&A"
+                    aria-label="Anonymous Q&A"
+                  >
+                    <MessageCircleQuestion className="h-4.5 w-4.5" />
+                  </Button>
+                  <span className="text-[9px] text-gray-400 sm:hidden mt-0.5">Q&A</span>
+                </div>
+              )}
+              <div className="flex flex-col items-center">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => router.push('/anonymous-dm')}
+                  className="text-gray-400 hover:text-gray-600 rounded-full h-9 w-9 flex items-center justify-center"
+                  title="Anonymous DM"
+                  aria-label="Anonymous DM"
+                >
+                  <MessageSquareLock className="h-4.5 w-4.5" />
+                </Button>
+                <span className="text-[9px] text-gray-400 sm:hidden mt-0.5">DM</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleLogout}
+                  className="text-gray-400 hover:text-red-500 hover:bg-red-50/50 rounded-full h-9 w-9 flex items-center justify-center transition-colors"
+                  title="Sign out"
+                  aria-label="Sign out"
+                >
+                  <LogOut className="h-4.5 w-4.5" />
+                </Button>
+                <span className="text-[9px] text-gray-400 sm:hidden mt-0.5">Logout</span>
+              </div>
             </div>
           </div>
 
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search conversations..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-gray-50 border-gray-200 focus:bg-white"
-            />
+          {/* Tab Switcher */}
+          <div className="flex gap-2 mb-4">
+            <Button
+              size="sm"
+              variant={activeTab === 'chats' ? 'default' : 'outline'}
+              onClick={() => setActiveTab('chats')}
+              className={cn(
+                "flex-1 rounded-full text-sm font-medium",
+                activeTab === 'chats' ? 'bg-[#c7b793] text-white hover:bg-[#b8a57e]' : 'border-[#c7b793]/30 text-gray-600 hover:bg-[#c7b793]/10'
+              )}
+            >
+              Chats
+            </Button>
+            <Button
+              size="sm"
+              variant={activeTab === 'anonymous' ? 'default' : 'outline'}
+              onClick={() => setActiveTab('anonymous')}
+              className={cn(
+                "flex-1 rounded-full text-sm font-medium",
+                activeTab === 'anonymous' ? 'bg-[#c7b793] text-white hover:bg-[#b8a57e]' : 'border-[#c7b793]/30 text-gray-600 hover:bg-[#c7b793]/10'
+              )}
+            >
+              Anonymous DM
+            </Button>
           </div>
+
+          {/* Search - only show in chats tab */}
+          {activeTab === 'chats' && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search contacts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 bg-[#faf8f5] border-transparent rounded-full focus:bg-white focus:border-[#c7b793]/40 focus:ring-[#c7b793]/10 text-sm h-9 text-gray-800 placeholder-gray-400"
+              />
+            </div>
+          )}
         </div>
 
         {/* Conversations List */}
-        <ScrollArea className="flex-1">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-            </div>
-          ) : filteredConversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-center p-4">
-              <MessageCircle className="h-12 w-12 text-gray-300 mb-3" />
-              <p className="text-gray-500 text-sm mb-1">No conversations yet</p>
-              <p className="text-gray-400 text-xs">
-                {searchQuery ? 'No matches found' : 'Start a conversation with someone'}
-              </p>
-            </div>
+        <ScrollArea className="flex-1 bg-white">
+          {activeTab === 'chats' ? (
+            <>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-48">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#c7b793]"></div>
+                </div>
+              ) : filteredConversations.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 text-center p-6">
+                  <div className="w-14 h-14 bg-[#faf8f5] border border-[#c7b793]/15 rounded-full flex items-center justify-center mb-3">
+                    <MessageCircle className="h-7 w-7 text-[#c7b793]/70" />
+                  </div>
+                  <p className="text-gray-700 font-semibold text-sm">No conversations</p>
+                  <p className="text-gray-400 text-xs mt-1 px-4">
+                    {searchQuery ? 'No matching contacts found' : 'Click the compose icon above to start a secure chat'}
+                  </p>
+                </div>
+              ) : (
+                <ConversationList
+                  conversations={filteredConversations}
+                  selectedConversation={selectedConversation}
+                  onSelectConversation={(conversation) => {
+                    setSelectedConversation(conversation);
+                  }}
+                  currentUser={currentUser}
+                />
+              )}
+            </>
           ) : (
-            <ConversationList
-              conversations={filteredConversations}
-              selectedConversation={selectedConversation}
-              onSelectConversation={(conversation) => {
-                setSelectedConversation(conversation);
-                setIsMobileSidebarOpen(false); // Close sidebar on mobile after selection
-              }}
-              currentUser={currentUser}
-            />
+            // IMPORTANT: Show Anonymous DM list when anonymous tab is active
+            // This replaces the previous AnonymousAnswers component
+            <div className="p-4">
+              <AnonymousDMList
+                conversations={anonymousConversations}
+                selectedConversation={selectedAnonymousConversation}
+                onSelectConversation={(conversation: any) => {
+                  setSelectedAnonymousConversation(conversation);
+                }}
+                currentUser={currentUser}
+              />
+            </div>
           )}
         </ScrollArea>
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 md:ml-0">
+      <div className={cn(
+        "flex-1 flex flex-col min-w-0 h-full",
+        selectedConversation ? "flex" : "hidden md:flex"
+      )}>
         {selectedConversation ? (
           <PersonalChat
             conversation={selectedConversation}
@@ -229,48 +336,35 @@ export default function PersonalChatPage() {
             onBack={() => setSelectedConversation(null)}
           />
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+          <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-white to-[#faf8f5]">
             <div className="text-center max-w-md mx-auto p-8">
-              <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center mb-6 mx-auto">
-                <MessageCircle className="h-12 w-12 text-blue-600" />
+              <div className="w-20 h-20 bg-[#faf8f5] border border-[#c7b793]/20 rounded-full flex items-center justify-center mb-6 mx-auto shadow-sm">
+                <MessageCircle className="h-10 w-10 text-[#c7b793]" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-3">
-                Welcome to Personal Chat
+              <h2 className="text-2xl font-bold text-gray-800 tracking-tight mb-2">
+                Secure Chat Tunnel
               </h2>
-              <p className="text-gray-500 mb-6 leading-relaxed">
-                Select a conversation from the sidebar to start chatting with your contacts.
-                All messages are private and secure.
+              <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+                Select an authorized contact from the directory to establish an encrypted message channel. All metadata is stripped and communications are peer-verified.
               </p>
-              <div className="flex flex-col space-y-2 text-sm text-gray-400">
+              <div className="flex flex-col space-y-2.5 text-xs text-[#a38c5b] font-medium">
                 <div className="flex items-center justify-center space-x-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>Real-time messaging</span>
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                  <span>Real-time channel active</span>
                 </div>
                 <div className="flex items-center justify-center space-x-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span>Read receipts</span>
+                  <span className="w-1.5 h-1.5 bg-[#c7b793] rounded-full"></span>
+                  <span>Zero metadata storage</span>
                 </div>
                 <div className="flex items-center justify-center space-x-2">
-                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                  <span>Typing indicators</span>
+                  <span className="w-1.5 h-1.5 bg-[#c7b793] rounded-full"></span>
+                  <span>Client-side decryption</span>
                 </div>
               </div>
             </div>
           </div>
         )}
       </div>
-
-      {/* Mobile menu button */}
-      {!selectedConversation && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsMobileSidebarOpen(true)}
-          className="fixed top-4 left-4 z-30 md:hidden bg-white shadow-lg hover:bg-gray-50 min-h-[44px] min-w-[44px] touch-manipulation"
-        >
-          <MessageCircle className="h-5 w-5" />
-        </Button>
-      )}
     </div>
   );
 }

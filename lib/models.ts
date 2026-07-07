@@ -361,6 +361,11 @@ if (typeof window !== 'undefined') {
     metadata: {
       type: Schema.Types.Mixed,
     },
+    // IMPORTANT: Add systemData field for Q&A notifications with link button
+    // This stores data like { type: 'qa_started', publicId: 'xxx', question: 'xxx' }
+    systemData: {
+      type: Schema.Types.Mixed,
+    },
   }, {
     timestamps: true,
   });

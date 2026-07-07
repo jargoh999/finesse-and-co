@@ -18,6 +18,12 @@ interface Message {
   conversationId: string;
   sender: string | { _id: string; name: string; email: string; image?: string };
   content: string;
+  type?: string;
+  systemData?: {
+    type: string;
+    publicId: string;
+    question: string;
+  };
   read?: boolean;
   readAt?: Date;
   createdAt?: Date | string;
@@ -161,7 +167,28 @@ export function Chat({ conversationId, otherUserId }: ChatProps) {
             </div>
           )}
 
-          <p className="text-sm">{msg.content}</p>
+          {msg.type === 'system' ? (
+            // System message with Q&A link button
+            <div className="space-y-3">
+              <p className="text-sm leading-relaxed break-words font-normal">
+                {msg.content}
+              </p>
+              {msg.systemData?.type === 'qa_started' && (
+                <div className="pt-2">
+                  <Button
+                  //@ts-ignore
+                    onClick={() => window.open(`/anonymous/answer/${msg.systemData.publicId}`, '_blank')}
+                    className="bg-[#c7b793] hover:bg-[#b8a57e] text-white rounded-lg h-10 px-5 text-sm font-medium shadow-sm transition-all duration-200 w-full"
+                  >
+                    Answer Question
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            // Regular message
+            <p className="text-sm">{msg.content}</p>
+          )}
 
           {/* Timestamp at bottom for current user messages */}
           {isCurrentUser && (

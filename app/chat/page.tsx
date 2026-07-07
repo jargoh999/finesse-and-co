@@ -201,9 +201,9 @@ export default function ChatPage() {
 
   if (!currentUser) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center h-screen bg-white" style={{ fontFamily: "'Outfit', sans-serif" }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#c7b793] mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
@@ -211,7 +211,10 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-indigo-50 to-blue-50">
+    <div className="flex h-screen bg-white flex flex-col" style={{ fontFamily: "'Outfit', sans-serif" }}>
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+      `}</style>
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
@@ -221,14 +224,13 @@ export default function ChatPage() {
               variant="ghost"
               size="icon"
               onClick={() => router.push('/')}
-              className="md:hidden"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
               <h1 className="text-lg font-bold text-gray-900">General Chat</h1>
               <p className="text-xs text-gray-500 flex items-center">
-                <span className={`w-2 h-2 rounded-full mr-1 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                <span className={`w-2 h-2 rounded-full mr-1 ${isConnected ? 'bg-[#c7b793]' : 'bg-red-500'}`}></span>
                 {isConnected ? 'Live' : 'Offline'}
               </p>
             </div>
@@ -237,7 +239,7 @@ export default function ChatPage() {
             variant="ghost"
             size="icon"
             onClick={handleLogout}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-500 hover:text-[#c7b793]"
             title="Sign out"
           >
             <LogOut className="h-4 w-4" />
@@ -250,14 +252,14 @@ export default function ChatPage() {
             {isLoading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center space-y-2">
-                  <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <div className="w-12 h-12 border-4 border-[#c7b793] border-t-transparent rounded-full animate-spin mx-auto"></div>
                   <p className="text-sm font-medium text-gray-600">Loading conversation...</p>
                   <p className="text-xs text-gray-400">Connecting to the chat server</p>
                 </div>
               </div>
             ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full py-12 text-center">
-                <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl flex items-center justify-center mb-4">
+                <div className="w-24 h-24 bg-[#c7b793]/10 rounded-2xl flex items-center justify-center mb-4">
                   <span className="text-4xl">💬</span>
                 </div>
                 <h3 className="text-xl font-bold text-gray-800 mb-2">No messages yet</h3>
@@ -265,7 +267,7 @@ export default function ChatPage() {
                   Be the first to send a message and start the conversation!
                 </p>
                 <div className="flex space-x-2">
-                  <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">Type below</span>
+                  <span className="px-3 py-1 bg-[#c7b793]/10 text-[#c7b793] text-xs font-medium rounded-full">Type below</span>
                   <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">Press Enter to send</span>
                 </div>
               </div>
@@ -287,14 +289,14 @@ export default function ChatPage() {
                         <div className="relative group">
                           <Avatar className="h-8 w-8 flex-shrink-0 transition-transform group-hover:scale-110">
                             <AvatarImage src={message.senderImage} />
-                            <AvatarFallback className="text-xs bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
+                            <AvatarFallback className="text-xs bg-[#c7b793] text-white">
                               {message.senderName.split(' ').map((n: string) => n[0]).join('').toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                         </div>
                         <div
                           className={`relative rounded-2xl px-4 py-2 shadow-sm transition-all duration-200 ${message.senderId === currentUser.id
-                            ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-br-none'
+                            ? 'bg-[#c7b793] text-white rounded-br-none'
                             : 'bg-white border border-gray-100 rounded-bl-none shadow-sm'}`}
                         >
                           {message.senderId !== currentUser.id && (
@@ -312,11 +314,11 @@ export default function ChatPage() {
                           </p>
                           {message.senderId === currentUser.id && (
                             <div className="flex items-center justify-end mt-1 space-x-1">
-                              <span className="text-[10px] text-blue-100">
+                              <span className="text-[10px] text-white/80">
                                 {format(message.timestamp, 'MMM d, yyyy h:mm a')}
                               </span>
-                              <span className="text-blue-200">•</span>
-                              <span className="text-xs text-blue-100">
+                              <span className="text-white/60">•</span>
+                              <span className="text-xs text-white/80">
                                 {'✓✓'}
                               </span>
                             </div>
@@ -325,7 +327,7 @@ export default function ChatPage() {
                           {/* Message status indicator */}
                           {message.senderId === currentUser.id && (
                             <div className="absolute -bottom-1.5 right-0 w-3 h-3 overflow-hidden">
-                              <div className="absolute -top-3 right-0 w-3 h-3 bg-blue-600 transform -rotate-45 origin-bottom-left"></div>
+                              <div className="absolute -top-3 right-0 w-3 h-3 bg-[#c7b793] transform -rotate-45 origin-bottom-left"></div>
                             </div>
                           )}
                           {message.senderId !== currentUser.id && (
@@ -355,7 +357,7 @@ export default function ChatPage() {
                     setNewMessage(e.target.value);
                   }}
                   placeholder="Type a message..."
-                  className="pl-4 pr-12 py-6 rounded-2xl border-0 bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 transition-all duration-200 text-black"
+                  className="pl-4 pr-12 py-6 rounded-2xl border-0 bg-gray-50 focus-visible:ring-2 focus-visible:ring-[#c7b793] transition-all duration-200 text-black"
                   onKeyPress={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -366,7 +368,7 @@ export default function ChatPage() {
                 <Button
                   type="submit"
                   disabled={!newMessage.trim()}
-                  className={`absolute right-2 bottom-2 h-10 w-10 rounded-full p-0 transition-all duration-200 ${!newMessage.trim() ? 'bg-gray-200 text-gray-400' : 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 shadow-lg transform hover:scale-105'}`}
+                  className={`absolute right-2 bottom-2 h-10 w-10 rounded-full p-0 transition-all duration-200 ${!newMessage.trim() ? 'bg-gray-200 text-gray-400' : 'bg-[#c7b793] hover:bg-[#c7b793]/80 shadow-lg transform hover:scale-105'}`}
                 >
                   <Send className="h-4 w-4" />
                   <span className="sr-only">Send message</span>

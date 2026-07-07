@@ -19,12 +19,19 @@ interface Conversation {
     content: string;
     sender: { name: string; email: string };
     createdAt: Date;
+    type?: string;
+    systemData?: {
+      type: string;
+      publicId: string;
+      question: string;
+    };
   };
   lastMessageAt: Date;
   unreadCount: number;
 }
 
 interface ConversationListProps {
+  
   conversations: Conversation[];
   selectedConversation: Conversation | null;
   onSelectConversation: (conversation: Conversation) => void;
@@ -42,44 +49,26 @@ export function ConversationList({
     return message.substring(0, maxLength) + '...';
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online':
-        return 'bg-green-500';
-      case 'away':
-        return 'bg-yellow-500';
-      default:
-        return 'bg-gray-400';
-    }
-  };
 
   return (
-    <div className="divide-y divide-gray-100">
+    <div className="divide-y divide-gray-100/50">
       {conversations.map((conversation) => (
         <div
           key={conversation._id}
           onClick={() => onSelectConversation(conversation)}
           className={cn(
-            'p-4 cursor-pointer transition-colors hover:bg-gray-50 min-h-[72px] touch-manipulation',
-            selectedConversation?._id === conversation._id && 'bg-blue-50 border-r-2 border-blue-500'
+            'p-4 cursor-pointer transition-all duration-200 hover:bg-[#faf8f5]/80 min-h-[72px] touch-manipulation',
+            selectedConversation?._id === conversation._id && 'bg-[#f7f4ed]/80 border-r-4 border-[#c7b793]'
           )}
         >
           <div className="flex items-center space-x-3">
-            {/* Avatar with status indicator */}
-            <div className="relative">
-              <Avatar className="h-12 w-12">
-                <AvatarImage src={conversation.participant?.image} />
-                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-semibold">
-                  {conversation.participant?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || 'U'}
-                </AvatarFallback>
-              </Avatar>
-              <div
-                className={cn(
-                  'absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white',
-                  getStatusColor(conversation.participant?.status || 'offline')
-                )}
-              />
-            </div>
+            {/* Avatar */}
+            <Avatar className="h-12 w-12 border border-[#c7b793]/10">
+              <AvatarImage src={conversation.participant?.image} />
+              <AvatarFallback className="bg-[#c7b793] text-white font-semibold shadow-sm">
+                {conversation.participant?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || 'U'}
+              </AvatarFallback>
+            </Avatar>
 
             {/* Conversation info */}
             <div className="flex-1 min-w-0">
@@ -87,30 +76,26 @@ export function ConversationList({
                 <h3 className="text-sm font-semibold text-gray-900 truncate">
                   {conversation.participant?.name || conversation.participant?.email}
                 </h3>
-                <div className="flex items-center space-x-1">
-                  {conversation.lastMessageAt && (
-                    <span className="text-xs text-gray-500">
-                      {formatDistanceToNow(new Date(conversation.lastMessageAt), { addSuffix: false })}
-                    </span>
-                  )}
-                  {conversation.unreadCount > 0 && (
-                    <Badge variant="destructive" className="h-5 w-5 p-0 flex items-center justify-center text-xs">
-                      {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
-                    </Badge>
-                  )}
-                </div>
+                {conversation.lastMessageAt && (
+                  <span className="text-xs text-gray-400">
+                    {formatDistanceToNow(new Date(conversation.lastMessageAt), { addSuffix: false })}
+                  </span>
+                )}
               </div>
 
               {conversation.lastMessage ? (
-                <div className="flex items-center justify-between">
-                  <p className={cn(
-                    'text-sm truncate',
-                    conversation.unreadCount > 0 ? 'text-gray-900 font-medium' : 'text-gray-500'
-                  )}>
-                    {conversation.lastMessage.sender.email === currentUser?.email ? 'You: ' : ''}
-                    {truncateMessage(conversation.lastMessage.content)}
-                  </p>
-                </div>
+                <p className="text-sm text-gray-500 truncate">
+                  {conversation.lastMessage.type === 'system' ? (
+                    <span className="text-[#a38c5b] font-medium">
+                       Q&A: {conversation.lastMessage.systemData?.question || 'New question'}
+                    </span>
+                  ) : (
+                    <>
+                      {conversation.lastMessage.sender.email === currentUser?.email ? 'You: ' : ''}
+                      {truncateMessage(conversation.lastMessage.content)}
+                    </>
+                  )}
+                </p>
               ) : (
                 <p className="text-sm text-gray-400 italic">
                   No messages yet

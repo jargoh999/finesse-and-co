@@ -3,7 +3,7 @@ import { Inter } from 'next/font/google';
 import '../styles/globals.css';
 import { Providers } from '@/app/providers';
 
-import { AssistantButton } from '@/components/AssistantButton';
+// import { AssistantButton } from '@/components/AssistantButton';
 import { AutoSaveUserData } from '@/components/AutoSaveUserData';
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration';
 import { SecurityFeatures } from '@/components/SecurityFeatures';
@@ -42,7 +42,7 @@ export default function RootLayout({
                 <Providers>
                     <SecurityFeatures />
                     {children}
-                    <AssistantButton />
+                    {/* <AssistantButton /> */}
                     <AutoSaveUserData />
                     <ServiceWorkerRegistration />
             

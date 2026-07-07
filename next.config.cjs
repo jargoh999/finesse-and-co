@@ -1,6 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  turbopack: {
+    resolveAlias: {
+      net: false,
+      tls: false,
+      dns: false,
+      fs: false,
+    },
+  },
   webpack: (config, { isServer }) => {
     // Fixes npm packages that depend on `net` module
     if (!isServer) {

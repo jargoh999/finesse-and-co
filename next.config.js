@@ -1,6 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  turbopack: {
+    resolveAlias: {
+      net: false,
+      tls: false,
+      dns: false,
+      fs: false,
+    },
+  },
 
   // Add Pusher domains to allowed image domains
   images: {

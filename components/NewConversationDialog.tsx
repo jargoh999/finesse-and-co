@@ -165,12 +165,12 @@ export function NewConversationDialog({ onSelectUser, currentUser }: NewConversa
             {user.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || 'U'}
           </AvatarFallback>
         </Avatar>
-        <div
+        {/* <div
           className={cn(
             'absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white',
             getStatusColor(user.status || 'offline')
           )}
-        />
+        /> */}
       </div>
 
       <div className="flex-1 min-w-0">
@@ -236,7 +236,7 @@ export function NewConversationDialog({ onSelectUser, currentUser }: NewConversa
           <UserPlus className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md mx-4 max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Start New Conversation</DialogTitle>
           <DialogDescription>

@@ -53,6 +53,7 @@ export async function GET(request: Request) {
       .lean();
 
       // Transform messages to match the expected format
+      // IMPORTANT: Include systemData field for Q&A link button rendering
       //@ts-ignore
     const transformedMessages = messages.map(msg => ({
       id: msg._id.toString(),
@@ -61,7 +62,9 @@ export async function GET(request: Request) {
       senderName: msg.sender.name,
       senderImage: msg.sender.image,
       timestamp: msg.createdAt,
-      type: msg.type || 'text'
+      type: msg.type || 'text',
+      // Include systemData for Q&A notifications with link button
+      systemData: msg.systemData || null
     }));
 
     return NextResponse.json({

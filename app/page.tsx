@@ -17,18 +17,18 @@ export default function WelcomePage() {
   }, [router])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0f0c29] via-[#302b63] to-[#24243e] overflow-hidden relative flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-white via-[#f5f0e6] to-[#c7b793] overflow-hidden relative flex flex-col items-center justify-center p-4">
       <Head>
         <title>Welcome</title>
         <meta name="description" content="Welcome to our secure platform" />
-        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;900&display=swap" rel="stylesheet"/>
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;900&display=swap" rel="stylesheet" />
       </Head>
-      
+
       {/* Logo with bounce animation */}
       <div className="relative z-10 text-center mb-8 animate-float">
-        <img 
-          src="/logo3333.png" 
-          alt="Logo" 
+        <img
+          src="/logo3333.png"
+          alt="Logo"
           className="h-64 w-auto mx-auto drop-shadow-[0_5px_15px_rgba(199,183,147,0.4)] hover:drop-shadow-[0_5px_25px_rgba(199,183,147,0.7)] transition-all duration-300"
         />
       </div>
@@ -36,10 +36,10 @@ export default function WelcomePage() {
       {/* Gamified Text - Moved to bottom */}
       <div className="absolute bottom-8 left-0 right-0 text-center">
         <div className="inline-flex flex-wrap justify-center gap-1">
-          {['S','O','C','I','A','L',' ','B','U','T',' ','S','E','C','U','R','E'].map((letter, index) => (
-            <span 
-              key={index} 
-              className="letter text-white/90 text-shadow-sm"
+          {['S', 'O', 'C', 'I', 'A', 'L', ' ', 'B', 'U', 'T', ' ', 'S', 'E', 'C', 'U', 'R', 'E'].map((letter, index) => (
+            <span
+              key={index}
+              className="letter text-gray-800 text-shadow-sm"
               style={{
                 animation: `glow 2s ease-in-out ${index * 0.1}s infinite alternate`,
                 textShadow: '0 0 5px rgba(199, 183, 147, 0.6)',
