@@ -45,7 +45,7 @@ export default function AnonymousDMPage() {
     setCurrentUser(user);
     loadConversations();
     setupPolling();
-    
+
     return () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);

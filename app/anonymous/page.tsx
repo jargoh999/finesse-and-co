@@ -9,6 +9,7 @@ import { Plus, Copy, Trash2, Link as LinkIcon, ArrowLeft } from 'lucide-react';
 import { getCurrentUserFromSession, clearCurrentUserSession } from '@/lib/client-auth';
 import { AnonymousAnswers } from '../../components/AnonymousAnswers';
 import { cn } from '@/lib/utils';
+// import { useBackButtonGuard } from '@/hooks/useBackButtonGuard';
 
 interface AnonymousQuestion {
   _id: string;
@@ -19,6 +20,8 @@ interface AnonymousQuestion {
 }
 
 export default function AnonymousPage() {
+  // Prevent phone/browser back button from leaving the app tab
+  // useBackButtonGuard('/personal-chat');
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [questions, setQuestions] = useState<AnonymousQuestion[]>([]);
@@ -118,7 +121,7 @@ export default function AnonymousPage() {
       {/* Sidebar */}
       <div className="w-full md:w-80 lg:w-96 bg-white border-r border-[#c7b793]/15 flex flex-col overflow-hidden h-full">
         {/* Header */}
-        <div className="p-4 border-b border-[#c7b793]/15 bg-white">
+        <div className="p-4 border-b border-[#c7b793]/15 bg-white flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-xl font-bold text-gray-900 tracking-tight">Anonymous Q&A</h1>
@@ -149,7 +152,7 @@ export default function AnonymousPage() {
           </div>
 
           {/* IMPORTANT: Tab Switcher for Questions and Answers */}
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2">
             <Button
               size="sm"
               variant={activeTab === 'questions' ? 'default' : 'outline'}
@@ -173,26 +176,6 @@ export default function AnonymousPage() {
               Answers
             </Button>
           </div>
-
-          {/* Create Question Form - only show in Questions tab */}
-          {activeTab === 'questions' && (
-            <form onSubmit={createQuestion} className="space-y-2">
-              <Input
-                placeholder="Ask a question for anonymous answers..."
-                value={newQuestion}
-                onChange={(e) => setNewQuestion(e.target.value)}
-                className="bg-[#faf8f5] border-transparent rounded-full focus:bg-white focus:border-[#c7b793]/40 focus:ring-[#c7b793]/10 text-sm h-9 text-gray-800 placeholder-gray-400"
-              />
-              <Button
-                type="submit"
-                disabled={!newQuestion.trim()}
-                className="w-full bg-[#c7b793] hover:bg-[#b8a57e] text-white rounded-full h-9 text-sm font-medium"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Create Question
-              </Button>
-            </form>
-          )}
         </div>
 
         {/* IMPORTANT: Show Questions List or Answers based on active tab */}
@@ -265,6 +248,28 @@ export default function AnonymousPage() {
             </div>
           )}
         </ScrollArea>
+
+        {/* IMPORTANT: Question input always at the bottom of the sidebar */}
+        {activeTab === 'questions' && (
+          <div className="flex-shrink-0 p-4 bg-white border-t border-[#c7b793]/15">
+            <form onSubmit={createQuestion} className="space-y-2">
+              <Input
+                placeholder="Ask a question for anonymous answers..."
+                value={newQuestion}
+                onChange={(e) => setNewQuestion(e.target.value)}
+                className="bg-[#faf8f5] border-transparent rounded-full focus:bg-white focus:border-[#c7b793]/40 focus:ring-[#c7b793]/10 text-sm h-9 text-gray-800 placeholder-gray-400"
+              />
+              <Button
+                type="submit"
+                disabled={!newQuestion.trim()}
+                className="w-full bg-[#c7b793] hover:bg-[#b8a57e] text-white rounded-full h-9 text-sm font-medium"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Question
+              </Button>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* Main Content - Answers */}

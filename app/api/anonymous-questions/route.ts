@@ -28,7 +28,7 @@ const AnonymousDMSchema = new mongoose.Schema({
 
 const AnonymousDM = mongoose.models.AnonymousDM || mongoose.model('AnonymousDM', AnonymousDMSchema);
 
-// GET - Get all anonymous questions for current user
+// GET - Get all anonymous questions for current user, or single question by publicId
 export async function GET(req: NextRequest) {
   try {
     const user = await getAuthenticatedUser(req);
@@ -38,6 +38,19 @@ export async function GET(req: NextRequest) {
 
     await dbConnect();
     
+    const { searchParams } = new URL(req.url);
+    const publicId = searchParams.get('publicId');
+    
+    // IMPORTANT: If publicId is provided, fetch single question for answer page
+    if (publicId) {
+      const question = await AnonymousQuestion.findOne({ publicId });
+      if (!question) {
+        return NextResponse.json({ error: 'Question not found' }, { status: 404 });
+      }
+      return NextResponse.json({ question });
+    }
+    
+    // Otherwise, return all questions for current user
     const questions = await AnonymousQuestion.find({ userId: user.id }).sort({ createdAt: -1 });
     
     return NextResponse.json({ questions });
@@ -72,12 +85,28 @@ export async function POST(req: NextRequest) {
       publicId,
     });
     
-    // Get all users except the sender
-    const allUsers = await PrivateUser.find({ _id: { $ne: user.id } });
+    // IMPORTANT: Only send Q&A notifications to contacts with existing conversations
+    // Find all conversations where the current user is a participant
+    const existingConversations = await Conversation.find({
+      participants: { $in: [user.id] }
+    });
     
-    // IMPORTANT: Send system message to Anonymous DM instead of regular chat
-    // This sends Q&A notifications to all users' anonymous DM inbox with link button
-    const dms = allUsers.map((u: { _id: { toString: () => any; }; }) => ({
+    // Extract unique user IDs from these conversations (excluding the sender)
+    const contactUserIds = new Set<string>();
+    existingConversations.forEach((conv: any) => {
+      conv.participants.forEach((participantId: string) => {
+        if (participantId !== user.id) {
+          contactUserIds.add(participantId);
+        }
+      });
+    });
+    
+    // Get the actual user objects for these contacts
+    const contactUsers = await PrivateUser.find({ _id: { $in: Array.from(contactUserIds) } });
+    
+    // IMPORTANT: Send system message to Anonymous DM only for contacts with existing conversations
+    // This sends Q&A notifications to users who have chatted with the sender before
+    const dms = contactUsers.map((u: { _id: { toString: () => any; }; }) => ({
       senderId: user.id,
       receiverId: u._id.toString(),
       content: `${user.name || user.email} started a new Q&A: "${question.trim()}"`,

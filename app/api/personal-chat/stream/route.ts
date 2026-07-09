@@ -3,6 +3,8 @@ import { getAuthenticatedUser } from '@/lib/auth-helper';
 import dbConnect from '@/lib/mongodb';
 import { Message, Conversation } from '@/lib/models';
 import { Types } from 'mongoose';
+import { chatEmitter } from '@/lib/chat-emitter';
+import { memoryCache } from '@/lib/cache';
 
 export async function GET(request: Request) {
   try {
@@ -23,16 +25,20 @@ export async function GET(request: Request) {
 
     await dbConnect();
 
-    // Verify the conversation exists and user is a participant
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return new Response('Conversation not found', { status: 404 });
+    // Verify the conversation exists and user is a participant using cache
+    const cacheKey = `conv-participants:${conversationId}`;
+    let participants = memoryCache.get(cacheKey);
+    if (!participants) {
+      const conversation = await Conversation.findById(conversationId).select('participants').lean();
+      if (!conversation) {
+        return new Response('Conversation not found', { status: 404 });
+      }
+      participants = conversation.participants.map((p: any) => p.toString());
+      memoryCache.set(cacheKey, participants, 60000); // cache for 60s
     }
 
     // Check if user is a participant in this conversation
-    const isParticipant = conversation.participants.some((p: any) =>
-      p.toString() === user.id
-    );
+    const isParticipant = participants.includes(user.id);
 
     if (!isParticipant) {
       return new Response('Unauthorized', { status: 403 });
@@ -49,7 +55,7 @@ export async function GET(request: Request) {
 
     // Create a ReadableStream for SSE
     const stream = new ReadableStream({
-      async start(controller) {
+      start(controller) {
         // Send initial connection message
         controller.enqueue(`data: ${JSON.stringify({
           type: 'connected',
@@ -57,78 +63,41 @@ export async function GET(request: Request) {
           conversationId
         })}\n\n`);
 
-        // Store the last message timestamp to track new messages
-        let lastMessageTime = new Date();
-
-        // Function to check for new messages in this conversation
-        const checkForNewMessages = async () => {
+        // Event listener for chatEmitter
+        const eventName = `message:${conversationId}`;
+        const handleNewMessage = (data: any) => {
           try {
-            const newMessages = await Message.find({
-              conversation: conversationId,
-              createdAt: { $gt: lastMessageTime }
-            })
-              .populate('sender', 'name email image')
-              .sort({ createdAt: 1 })
-              .lean();
-
-            if (newMessages.length > 0) {
-              // Update last message time
-              lastMessageTime = new Date(newMessages[newMessages.length - 1].createdAt);
-
-              // Send new messages to client
-              newMessages.forEach((message: {
-                _id: any;
-                content: string;
-                sender: { _id: any; name: string; email: string; image?: string };
-                createdAt: Date;
-                type?: string;
-              }) => {
-                const transformedMessage = {
-                  _id: message._id.toString(),
-                  content: message.content,
-                  sender: {
-                    _id: message.sender._id.toString(),
-                    name: message.sender.name,
-                    email: message.sender.email,
-                    image: message.sender.image
-                  },
-                  createdAt: message.createdAt,
-                  type: message.type || 'text'
-                };
-                controller.enqueue(`data: ${JSON.stringify({
-                  type: 'new_message',
-                  message: transformedMessage,
-                  conversationId
-                })}\n\n`);
-              });
-            }
-          } catch (error) {
-            console.error('Error checking for new messages:', error);
+            controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
+          } catch (e) {
+            console.error('Error sending message to stream:', e);
           }
         };
 
-        // Check for new messages every second
-        const intervalId = setInterval(checkForNewMessages, 1000);
-
-        // Clean up on client disconnect
-        request.signal.addEventListener('abort', () => {
-          clearInterval(intervalId);
-          controller.close();
-        });
+        // Subscribe to emitter
+        chatEmitter.on(eventName, handleNewMessage);
 
         // Keep connection alive by sending periodic heartbeat
         const heartbeatInterval = setInterval(() => {
-          controller.enqueue(`data: ${JSON.stringify({
-            type: 'heartbeat',
-            conversationId
-          })}\n\n`);
+          try {
+            controller.enqueue(`data: ${JSON.stringify({
+              type: 'heartbeat',
+              conversationId
+            })}\n\n`);
+          } catch (e) {
+            console.error('Error sending heartbeat:', e);
+          }
         }, 30000);
 
-        // Clean up heartbeat on disconnect
+        // Clean up on client disconnect
         request.signal.addEventListener('abort', () => {
+          chatEmitter.off(eventName, handleNewMessage);
           clearInterval(heartbeatInterval);
+          try {
+            controller.close();
+          } catch (e) {
+            // Stream might already be closed
+          }
         });
-
       }
     });
 

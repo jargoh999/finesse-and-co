@@ -22,15 +22,25 @@ export default function AnonymousAnswerPage({ params }: { params: Promise<{ publ
       const resolvedParams = await params;
       setPublicId(resolvedParams.publicId);
       
-      // In a real app, you'd fetch the question details here
-      // For now, we'll just show the form
-      setQuestion('Loading question...');
-      
-      // Simulate loading
-      setTimeout(() => {
-        setQuestion('What would you like to know?');
+      // IMPORTANT: Fetch the actual question from the API using publicId
+      try {
+        const response = await fetch(`/api/anonymous-questions?publicId=${resolvedParams.publicId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.question) {
+            setQuestion(data.question.question);
+          } else {
+            setError('Question not found');
+          }
+        } else {
+          setError('Failed to load question');
+        }
+      } catch (error) {
+        console.error('Error loading question:', error);
+        setError('Failed to load question');
+      } finally {
         setIsLoading(false);
-      }, 500);
+      }
     };
     
     loadParams();

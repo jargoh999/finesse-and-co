@@ -1,17 +1,23 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, MessageCircle, LogOut,MessageCircleQuestion, MessageSquareLock } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Search, MessageCircle, LogOut, MessageCircleQuestion, MessageSquareLock, UserPlus, UserCircle } from 'lucide-react';
 import { getCurrentUserFromSession, clearCurrentUserSession } from '@/lib/client-auth';
 import { NewConversationDialog } from '../../components/NewConversationDialog';
 import { ConversationList } from '../../components/ConversationList';
 import { PersonalChat } from '../../components/PersonalChat';
 import { AnonymousAnswers } from '../../components/AnonymousAnswers';
 import { AnonymousDMList } from '../../components/AnonymousDMList';
+import { AnonymousDMConversation } from '../../components/AnonymousDMConversation';
+import { NewAnonymousDMDialog } from '../../components/NewAnonymousDMDialog';
+import { ThemeSwitcher } from '../../components/ThemeSwitcher';
+import { useTheme } from '../../contexts/ThemeContext';
+// import { useBackButtonGuard } from '@/hooks/useBackButtonGuard';
 import { cn } from '@/lib/utils';
 
 interface Conversation {
@@ -49,6 +55,9 @@ interface AnonymousConversation {
 
 export default function PersonalChatPage() {
   const router = useRouter();
+  const { colors } = useTheme();
+  // Prevent phone back button from leaving the app tab
+  // useBackButtonGuard('/personal-chat');
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [anonymousConversations, setAnonymousConversations] = useState<AnonymousConversation[]>([]);
@@ -57,7 +66,7 @@ export default function PersonalChatPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'chats' | 'anonymous'>('chats');
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [showNewDMDialog, setShowNewDMDialog] = useState(false);
 
   // Check authentication
   useEffect(() => {
@@ -69,28 +78,13 @@ export default function PersonalChatPage() {
     setCurrentUser(user);
   }, [router]);
 
-  // Load conversations and setup polling
+  // Load conversations once on mount (no constant polling)
   useEffect(() => {
     if (currentUser) {
       loadConversations();
       loadAnonymousConversations();
-      setupPolling();
     }
-
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-    };
   }, [currentUser]);
-
-  const setupPolling = () => {
-    // Poll for conversation updates every 2 seconds without showing loading state
-    pollingIntervalRef.current = setInterval(() => {
-      loadConversations(false);
-      loadAnonymousConversations(false);
-    }, 2000);
-  };
 
   const loadConversations = async (showLoading = true) => {
     try {
@@ -131,6 +125,22 @@ export default function PersonalChatPage() {
     router.push('/login');
   };
 
+  const handleSendAnonymousDM = async (receiverId: string, message: string) => {
+    try {
+      const response = await fetch('/api/anonymous-dm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receiverId, content: message }),
+      });
+
+      if (response.ok) {
+        loadAnonymousConversations();
+      }
+    } catch (error) {
+      console.error('Error sending anonymous DM:', error);
+    }
+  };
+
   const filteredConversations = conversations.filter(conv =>
     conv.participant?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     conv.participant?.email?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -155,15 +165,19 @@ export default function PersonalChatPage() {
 
       {/* Sidebar - Conversations List */}
       <div className={cn(
-        "w-full md:w-80 lg:w-96 bg-white border-r border-[#c7b793]/15 flex flex-col overflow-hidden h-full transition-all duration-300",
+        "w-full md:w-80 lg:w-96 bg-white flex flex-col overflow-hidden h-full transition-all duration-300",
         selectedConversation ? "hidden md:flex" : "flex"
-      )}>
+      )}
+        style={{ borderRightColor: colors.border }}
+      >
         {/* Header */}
-        <div className="p-4 border-b border-[#c7b793]/15 bg-white">
+        <div className="p-4 bg-white"
+          style={{ borderBottomColor: colors.border }}
+        >
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-xl font-bold text-gray-900 tracking-tight">Chats</h1>
-              <p className="text-xs text-[#a38c5b] font-medium mt-0.5">
+              <p className="text-xs font-medium mt-0.5" style={{ color: colors.text }}>
                 {conversations.length} active {conversations.length === 1 ? 'channel' : 'channels'}
               </p>
             </div>
@@ -209,18 +223,29 @@ export default function PersonalChatPage() {
                   <span className="text-[9px] text-gray-400 sm:hidden mt-0.5">Q&A</span>
                 </div>
               )}
+              <ThemeSwitcher />
+              {/* Profile button */}
               <div className="flex flex-col items-center">
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => router.push('/anonymous-dm')}
-                  className="text-gray-400 hover:text-gray-600 rounded-full h-9 w-9 flex items-center justify-center"
-                  title="Anonymous DM"
-                  aria-label="Anonymous DM"
+                  onClick={() => router.push('/profile')}
+                  className="text-gray-400 hover:text-[#c7b793] rounded-full h-9 w-9 flex items-center justify-center transition-colors"
+                  title="My Profile"
+                  aria-label="My Profile"
                 >
-                  <MessageSquareLock className="h-4.5 w-4.5" />
+                  {currentUser?.image ? (
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={currentUser.image} />
+                      <AvatarFallback className="bg-[#c7b793] text-white text-xs">
+                        {currentUser.name?.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    <UserCircle className="h-4.5 w-4.5" />
+                  )}
                 </Button>
-                <span className="text-[9px] text-gray-400 sm:hidden mt-0.5">DM</span>
+                <span className="text-[9px] text-gray-400 sm:hidden mt-0.5">Profile</span>
               </div>
               <div className="flex flex-col items-center">
                 <Button
@@ -238,31 +263,63 @@ export default function PersonalChatPage() {
             </div>
           </div>
 
-          {/* Tab Switcher */}
-          <div className="flex gap-2 mb-4">
-            <Button
-              size="sm"
-              variant={activeTab === 'chats' ? 'default' : 'outline'}
-              onClick={() => setActiveTab('chats')}
-              className={cn(
-                "flex-1 rounded-full text-sm font-medium",
-                activeTab === 'chats' ? 'bg-[#c7b793] text-white hover:bg-[#b8a57e]' : 'border-[#c7b793]/30 text-gray-600 hover:bg-[#c7b793]/10'
-              )}
-            >
-              Chats
-            </Button>
-            <Button
-              size="sm"
-              variant={activeTab === 'anonymous' ? 'default' : 'outline'}
-              onClick={() => setActiveTab('anonymous')}
-              className={cn(
-                "flex-1 rounded-full text-sm font-medium",
-                activeTab === 'anonymous' ? 'bg-[#c7b793] text-white hover:bg-[#b8a57e]' : 'border-[#c7b793]/30 text-gray-600 hover:bg-[#c7b793]/10'
-              )}
-            >
-              Anonymous DM
-            </Button>
-          </div>
+          {/* IMPORTANT: Tab Switcher - hide when Anonymous DM conversation is selected */}
+          {!selectedAnonymousConversation && (
+            <div className="flex gap-2 mb-4">
+              <Button
+                size="sm"
+                variant={activeTab === 'chats' ? 'default' : 'outline'}
+                onClick={() => setActiveTab('chats')}
+                className={cn(
+                  "flex-1 rounded-full text-sm font-medium",
+                  activeTab === 'chats' ? 'text-white' : 'text-gray-600'
+                )}
+                style={activeTab === 'chats' ? { backgroundColor: colors.primary } : { borderColor: colors.primaryLight, backgroundColor: 'transparent' }}
+                onMouseEnter={(e) => {
+                  if (activeTab === 'chats') {
+                    e.currentTarget.style.backgroundColor = colors.primaryHover;
+                  } else {
+                    e.currentTarget.style.backgroundColor = colors.primaryLight;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab === 'chats') {
+                    e.currentTarget.style.backgroundColor = colors.primary;
+                  } else {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                Chats
+              </Button>
+              <Button
+                size="sm"
+                variant={activeTab === 'anonymous' ? 'default' : 'outline'}
+                onClick={() => setActiveTab('anonymous')}
+                className={cn(
+                  "flex-1 rounded-full text-sm font-medium",
+                  activeTab === 'anonymous' ? 'text-white' : 'text-gray-600'
+                )}
+                style={activeTab === 'anonymous' ? { backgroundColor: colors.primary } : { borderColor: colors.primaryLight, backgroundColor: 'transparent' }}
+                onMouseEnter={(e) => {
+                  if (activeTab === 'anonymous') {
+                    e.currentTarget.style.backgroundColor = colors.primaryHover;
+                  } else {
+                    e.currentTarget.style.backgroundColor = colors.primaryLight;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab === 'anonymous') {
+                    e.currentTarget.style.backgroundColor = colors.primary;
+                  } else {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                Anonymous DM
+              </Button>
+            </div>
+          )}
 
           {/* Search - only show in chats tab */}
           {activeTab === 'chats' && (
@@ -272,7 +329,16 @@ export default function PersonalChatPage() {
                 placeholder="Search contacts..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-[#faf8f5] border-transparent rounded-full focus:bg-white focus:border-[#c7b793]/40 focus:ring-[#c7b793]/10 text-sm h-9 text-gray-800 placeholder-gray-400"
+                className="pl-9 text-sm h-9 text-gray-800 placeholder-gray-400"
+                style={{ backgroundColor: colors.backgroundLight, borderColor: colors.border }}
+                onFocus={(e) => {
+                  e.target.style.backgroundColor = 'white';
+                  e.target.style.borderColor = colors.primary;
+                }}
+                onBlur={(e) => {
+                  e.target.style.backgroundColor = colors.backgroundLight;
+                  e.target.style.borderColor = colors.border;
+                }}
               />
             </div>
           )}
@@ -308,17 +374,98 @@ export default function PersonalChatPage() {
               )}
             </>
           ) : (
-            // IMPORTANT: Show Anonymous DM list when anonymous tab is active
-            // This replaces the previous AnonymousAnswers component
-            <div className="p-4">
-              <AnonymousDMList
-                conversations={anonymousConversations}
-                selectedConversation={selectedAnonymousConversation}
-                onSelectConversation={(conversation: any) => {
-                  setSelectedAnonymousConversation(conversation);
-                }}
-                currentUser={currentUser}
-              />
+            // IMPORTANT: Render full Anonymous DM page content in the second tab
+            // This includes the sidebar with conversation list and main chat area
+            <div className="flex h-full">
+              {/* Anonymous DM Sidebar */}
+              <div className={cn(
+                "w-full md:w-80 lg:w-96 bg-white border-r border-[#c7b793]/15 flex flex-col overflow-hidden h-full transition-all duration-300",
+                selectedAnonymousConversation ? "hidden md:flex" : "flex"
+              )}>
+                {/* Header */}
+                <div className="p-4 border-b border-[#c7b793]/15 bg-white">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h1 className="text-xl font-bold text-gray-900 tracking-tight">Anonymous DMs</h1>
+                      <p className="text-xs text-[#a38c5b] font-medium mt-0.5">
+                        {anonymousConversations.length} anonymous {anonymousConversations.length === 1 ? 'conversation' : 'conversations'}
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-2 sm:space-x-1.5">
+                      <div className="flex flex-col items-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setShowNewDMDialog(true)}
+                          className="text-gray-400 hover:text-gray-600 rounded-full h-9 w-9 flex items-center justify-center"
+                          title="New Anonymous Message"
+                          aria-label="New Anonymous Message"
+                        >
+                          <UserPlus className="h-4.5 w-4.5" />
+                        </Button>
+                        <span className="text-[9px] text-gray-400 sm:hidden mt-0.5">New</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Anonymous DM List */}
+                <ScrollArea className="flex-1 bg-white">
+                  {isLoading ? (
+                    <div className="flex items-center justify-center h-48">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#c7b793]"></div>
+                    </div>
+                  ) : anonymousConversations.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-48 text-center p-6">
+                      <div className="w-14 h-14 bg-[#faf8f5] border border-[#c7b793]/15 rounded-full flex items-center justify-center mb-3">
+                        <MessageCircle className="h-7 w-7 text-[#c7b793]/70" />
+                      </div>
+                      <p className="text-gray-700 font-semibold text-sm">No anonymous messages</p>
+                      <p className="text-gray-400 text-xs mt-1 px-4">
+                        When someone sends you an anonymous message, it will appear here
+                      </p>
+                    </div>
+                  ) : (
+                    <AnonymousDMList
+                      conversations={anonymousConversations}
+                      selectedConversation={selectedAnonymousConversation}
+                      onSelectConversation={(conversation: AnonymousConversation) => {
+                        setSelectedAnonymousConversation(conversation);
+                      }}
+                      currentUser={currentUser}
+                    />
+                  )}
+                </ScrollArea>
+              </div>
+
+              {/* Anonymous DM Chat Area */}
+              <div className={cn(
+                "flex-1 flex flex-col min-w-0 h-full",
+                selectedAnonymousConversation ? "flex" : "hidden md:flex"
+              )}>
+                {selectedAnonymousConversation ? (
+                  <AnonymousDMConversation
+                    conversation={selectedAnonymousConversation}
+                    currentUser={currentUser}
+                    onBack={() => setSelectedAnonymousConversation(null)}
+                    onRefresh={loadAnonymousConversations}
+                  />
+                ) : (
+                  <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-white to-[#faf8f5]">
+                    <div className="text-center max-w-md mx-auto p-8">
+                      <div className="w-20 h-20 bg-[#faf8f5] border border-[#c7b793]/20 rounded-full flex items-center justify-center mb-6 mx-auto shadow-sm">
+                        <MessageCircle className="h-10 w-10 text-[#c7b793]" />
+                      </div>
+                      <h2 className="text-2xl font-bold text-gray-800 tracking-tight mb-2">
+                        Anonymous Messages
+                      </h2>
+                      <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+                        Select a conversation to reply to anonymous messages. Your identity remains hidden from the sender.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </ScrollArea>
@@ -365,6 +512,13 @@ export default function PersonalChatPage() {
           </div>
         )}
       </div>
+
+      <NewAnonymousDMDialog
+        open={showNewDMDialog}
+        onOpenChange={setShowNewDMDialog}
+        onSend={handleSendAnonymousDM}
+        currentUser={currentUser}
+      />
     </div>
   );
 }

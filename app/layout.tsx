@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import '../styles/globals.css';
 import { Providers } from '@/app/providers';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 
 // import { AssistantButton } from '@/components/AssistantButton';
 import { AutoSaveUserData } from '@/components/AutoSaveUserData';
@@ -39,14 +40,15 @@ export default function RootLayout({
                 <meta name="apple-mobile-web-app-title" content="Szecurium" />
             </head>
             <body className={inter.className}>
-                <Providers>
-                    <SecurityFeatures />
-                    {children}
-                    {/* <AssistantButton /> */}
-                    <AutoSaveUserData />
-                    <ServiceWorkerRegistration />
-            
-                </Providers>
+                <ThemeProvider>
+                    <Providers>
+                        <SecurityFeatures />
+                        {children}
+                        {/* <AssistantButton /> */}
+                        <AutoSaveUserData />
+                        <ServiceWorkerRegistration />
+                    </Providers>
+                </ThemeProvider>
             </body>
         </html>
     );

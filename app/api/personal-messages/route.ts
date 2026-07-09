@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth-helper';
 import dbConnect from '@/lib/mongodb';
 import { Message, Conversation, PrivateUser } from '@/lib/models';
+import { chatEmitter } from '@/lib/chat-emitter';
+import { memoryCache } from '@/lib/cache';
 
-// Send a new personal message
+// Send a new personal message (supports text and media <2MB)
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
@@ -27,19 +29,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify the conversation exists and user is a participant
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return NextResponse.json(
-        { error: 'Conversation not found' },
-        { status: 404 }
-      );
+    // Verify the conversation exists and user is a participant using cache
+    const cacheKey = `conv-participants:${conversationId}`;
+    let participants = memoryCache.get(cacheKey);
+    if (!participants) {
+      const conversation = await Conversation.findById(conversationId).select('participants').lean();
+      if (!conversation) {
+        return NextResponse.json(
+          { error: 'Conversation not found' },
+          { status: 404 }
+        );
+      }
+      participants = conversation.participants.map((p: any) => p.toString());
+      memoryCache.set(cacheKey, participants, 60000); // cache for 60s
     }
 
     // Check if user is a participant in this conversation
-    const isParticipant = conversation.participants.some((p: any) =>
-      p.toString() === user.id
-    );
+    const isParticipant = participants.includes(user.id);
 
     if (!isParticipant) {
       return NextResponse.json(
@@ -48,44 +54,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the PrivateUser document for the sender
-    const senderUser = await PrivateUser.findById(user.id);
-    if (!senderUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
     // Create the message
-    const message = new Message({
+    const messageData: any = {
       conversation: conversationId,
       sender: user.id,
       content: content.trim(),
       type,
       status: 'sent'
-    });
+    };
 
+    const message = new Message(messageData);
     await message.save();
 
-    // Update conversation's last message
-    conversation.lastMessage = message._id;
-    await conversation.save();
+    // Update conversation's last message using direct update (saves 1 DB call)
+    await Conversation.updateOne(
+      { _id: conversationId },
+      { $set: { lastMessage: message._id } }
+    );
 
-    // Populate the message with sender details
-    const populatedMessage = await Message.findById(message._id)
-      .populate('sender', 'name email image')
-      .lean();
+    // Construct response manually to save another DB call
+    const populatedMessage = {
+      _id: message._id.toString(),
+      content: message.content,
+      sender: {
+        _id: user.id,
+        name: user.name,
+        email: user.email
+      },
+      timestamp: message.createdAt || new Date(),
+      type: message.type,
+    };
+
+    // Emit event for real-time SSE listener (0 DB queries for streaming!)
+    chatEmitter.emit(`message:${conversationId}`, {
+      type: 'new_message',
+      message: populatedMessage,
+      conversationId
+    });
 
     return NextResponse.json({
       success: true,
-      message: {
-        _id: populatedMessage._id,
-        content: populatedMessage.content,
-        sender: populatedMessage.sender,
-        timestamp: populatedMessage.createdAt,
-        type: populatedMessage.type
-      }
+      message: populatedMessage
     });
 
   } catch (error) {
@@ -115,7 +124,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const conversationId = searchParams.get('conversationId');
     const since = searchParams.get('since');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const limit = parseInt(searchParams.get('limit') || '80');
 
     if (!conversationId) {
       return NextResponse.json(
@@ -154,7 +163,7 @@ export async function GET(request: NextRequest) {
 
     // Get messages
     const messages = await Message.find(query)
-      .populate('sender', 'name email image')
+      .populate('sender', 'name email')
       .sort({ createdAt: 1 })
       .limit(limit)
       .lean();
@@ -165,7 +174,10 @@ export async function GET(request: NextRequest) {
       content: msg.content,
       sender: msg.sender,
       timestamp: msg.createdAt,
-      type: msg.type
+      type: msg.type,
+      isEdited: msg.isEdited || false,
+      editedAt: msg.editedAt,
+      systemData: msg.systemData,
     }));
 
     return NextResponse.json({
@@ -179,5 +191,94 @@ export async function GET(request: NextRequest) {
       { error: 'Failed to fetch messages' },
       { status: 500 }
     );
+  }
+}
+
+// PATCH - Edit a message (only the sender can edit their own messages)
+export async function PATCH(request: NextRequest) {
+  try {
+    await dbConnect();
+
+    const user = await getAuthenticatedUser(request);
+    if (!user?.email) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
+    const { messageId, content } = await request.json();
+
+    if (!messageId || !content?.trim()) {
+      return NextResponse.json({ error: 'Message ID and content are required' }, { status: 400 });
+    }
+
+    // Find the message and verify ownership
+    const message = await Message.findById(messageId).populate('sender', '_id');
+    if (!message) {
+      return NextResponse.json({ error: 'Message not found' }, { status: 404 });
+    }
+
+    const senderId = typeof message.sender === 'object' ? message.sender._id?.toString() : message.sender?.toString();
+    if (senderId !== user.id) {
+      return NextResponse.json({ error: 'You can only edit your own messages' }, { status: 403 });
+    }
+
+    // Update the message
+    message.content = content.trim();
+    message.isEdited = true;
+    message.editedAt = new Date();
+    await message.save();
+
+    const populated = await Message.findById(messageId)
+      .populate('sender', 'name email')
+      .lean() as any;
+
+    return NextResponse.json({
+      success: true,
+      message: {
+        _id: populated._id,
+        content: populated.content,
+        sender: populated.sender,
+        timestamp: populated.createdAt,
+        type: populated.type,
+        isEdited: populated.isEdited,
+        editedAt: populated.editedAt,
+      }
+    });
+
+  } catch (error) {
+    console.error('Error editing message:', error);
+    return NextResponse.json({ error: 'Failed to edit message' }, { status: 500 });
+  }
+}
+
+// DELETE - Bulk delete messages (only the sender can delete their own messages)
+export async function DELETE(request: NextRequest) {
+  try {
+    await dbConnect();
+
+    const user = await getAuthenticatedUser(request);
+    if (!user?.email) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
+    const { messageIds } = await request.json();
+
+    if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+      return NextResponse.json({ error: 'Message IDs array is required' }, { status: 400 });
+    }
+
+    // Only delete messages where sender is the current user
+    const result = await Message.deleteMany({
+      _id: { $in: messageIds },
+      sender: user.id,
+    });
+
+    return NextResponse.json({
+      success: true,
+      deleted: result.deletedCount,
+    });
+
+  } catch (error) {
+    console.error('Error deleting messages:', error);
+    return NextResponse.json({ error: 'Failed to delete messages' }, { status: 500 });
   }
 }

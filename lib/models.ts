@@ -347,7 +347,7 @@ if (typeof window !== 'undefined') {
     },
     type: {
       type: String,
-      enum: ['text', 'image', 'file', 'audio', 'system'],
+      enum: ['text', 'image', 'file', 'audio', 'system', 'media'],
       default: 'text',
     },
     requestId: {
@@ -366,9 +366,20 @@ if (typeof window !== 'undefined') {
     systemData: {
       type: Schema.Types.Mixed,
     },
+    // IMPORTANT: Message editing support
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
+      type: Date,
+    },
   }, {
     timestamps: true,
   });
+
+  // Index to speed up message history loading and streaming checks
+  messageSchema.index({ conversation: 1, createdAt: 1 });
 
   Message = (mongoose.models.Message as mongoose.Model<any>) || mongoose.model('Message', messageSchema);
 

@@ -8,9 +8,13 @@ import {
   Send,
   ArrowLeft,
   MoreVertical,
-  Paperclip,
   Smile,
-  X
+  X,
+  CheckSquare,
+  Square,
+  Trash2,
+  Edit2,
+  Check,
 } from 'lucide-react';
 import { format } from 'date-fns/format';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
@@ -31,6 +35,8 @@ interface Message {
   type: string;
   read?: boolean;
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'error';
+  isEdited?: boolean;
+  editedAt?: Date;
 }
 
 interface Conversation {
@@ -66,12 +72,23 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   const [isTyping, setIsTyping] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
+  // Select mode for multi-delete
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Edit mode
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [contextMenuMsgId, setContextMenuMsgId] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Debug: Log the conversation object
-  console.log('PersonalChat received conversation:', conversation);
+  const editInputRef = useRef<HTMLInputElement>(null);
+  // PERF: Track timestamp of latest message to avoid re-fetching full history each poll
+  const lastTimestampRef = useRef<string>(new Date(0).toISOString());
 
   // Validate conversation object
   if (!conversation || !conversation._id) {
@@ -101,6 +118,21 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     scrollToBottom();
   }, [messages]);
 
+  // Focus edit input when editing
+  useEffect(() => {
+    if (editingMessageId) {
+      editInputRef.current?.focus();
+    }
+  }, [editingMessageId]);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenuMsgId) return;
+    const handler = () => setContextMenuMsgId(null);
+    window.addEventListener('click', handler);
+    return () => window.removeEventListener('click', handler);
+  }, [contextMenuMsgId]);
+
   // Set up typing indicator
   const { onType, stopTyping } = useTypingIndicator(
     conversation._id,
@@ -111,7 +143,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   );
 
   const setupRealTimeConnection = () => {
-    // Try SSE first
     if (typeof EventSource !== 'undefined') {
       setupSSEConnection();
     } else {
@@ -161,31 +192,33 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   };
 
   const setupPollingConnection = () => {
-    // Poll for new messages every 1 second as fallback for better real-time experience
+    // PERF: Use a ref so the interval always reads the latest timestamp without stale closure
     pollingIntervalRef.current = setInterval(async () => {
       try {
-        const lastMessage = messages[messages.length - 1];
-        const since = lastMessage ? new Date(lastMessage.timestamp) : new Date(0);
-
         const response = await fetch(
-          `/api/personal-messages?conversationId=${conversation._id}&since=${since.toISOString()}`
+          `/api/personal-messages?conversationId=${conversation._id}&since=${lastTimestampRef.current}`
         );
 
         if (response.ok) {
           const data = await response.json();
           if (data.messages && data.messages.length > 0) {
+            // Update the timestamp ref to the newest message
+            const newest = data.messages[data.messages.length - 1];
+            if (newest?.timestamp) {
+              lastTimestampRef.current = new Date(newest.timestamp).toISOString();
+            }
             setMessages(prev => {
               const newMessages = data.messages.filter((msg: Message) =>
                 !prev.some(existing => existing._id === msg._id)
               );
-              return [...prev, ...newMessages];
+              return newMessages.length > 0 ? [...prev, ...newMessages] : prev;
             });
           }
         }
       } catch (error) {
         console.error('Polling error:', error);
       }
-    }, 1000);
+    }, 3000); // 3s — SSE handles real-time; this is fallback only
   };
 
   const cleanupRealTimeConnection = () => {
@@ -208,7 +241,12 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
       const response = await fetch(`/api/personal-messages?conversationId=${conversation._id}`);
       if (response.ok) {
         const data = await response.json();
-        setMessages(data.messages || []);
+        const msgs = data.messages || [];
+        setMessages(msgs);
+        // Seed the timestamp ref with the newest message so polling starts from there
+        if (msgs.length > 0) {
+          lastTimestampRef.current = new Date(msgs[msgs.length - 1].timestamp).toISOString();
+        }
       }
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -247,91 +285,262 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     }
   };
 
+  // ── Multi-select delete ───────────────────────────────────────
+  const toggleSelectMode = () => {
+    setSelectMode(prev => !prev);
+    setSelectedIds(new Set());
+    setContextMenuMsgId(null);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch('/api/personal-messages', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageIds: Array.from(selectedIds) }),
+      });
+      if (res.ok) {
+        setMessages(prev => prev.filter(m => !selectedIds.has(m._id)));
+        setSelectedIds(new Set());
+        setSelectMode(false);
+      }
+    } catch (err) {
+      console.error('Error deleting messages:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // ── Edit message ──────────────────────────────────────────────
+  const startEdit = (msg: Message) => {
+    setEditingMessageId(msg._id);
+    setEditContent(msg.content);
+    setContextMenuMsgId(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingMessageId(null);
+    setEditContent('');
+  };
+
+  const submitEdit = async () => {
+    if (!editContent.trim() || !editingMessageId) return;
+    setIsEditing(true);
+    try {
+      const res = await fetch('/api/personal-messages', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: editingMessageId, content: editContent.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(prev => prev.map(m =>
+          m._id === editingMessageId
+            ? { ...m, content: data.message.content, isEdited: true, editedAt: data.message.editedAt }
+            : m
+        ));
+        setEditingMessageId(null);
+        setEditContent('');
+      }
+    } catch (err) {
+      console.error('Error editing message:', err);
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-
   const renderMessage = (message: Message) => {
     const isCurrentUser = message.sender.email === currentUser?.email;
+    const isSelected = selectedIds.has(message._id);
+    const showContextMenu = contextMenuMsgId === message._id;
 
     return (
       <div
         key={message._id}
         className={cn(
-          'flex mb-4 px-2',
+          'flex mb-4 px-2 group',
           isCurrentUser ? 'justify-end' : 'justify-start'
         )}
+        onClick={() => {
+          if (selectMode && isCurrentUser) toggleSelect(message._id);
+        }}
       >
-        <div className={cn(
-          'max-w-[280px] sm:max-w-sm rounded-2xl px-4 py-3.5 shadow-sm relative',
-          isCurrentUser
-            ? 'bg-[#c7b793] text-white ml-auto rounded-tr-none'
-            : 'bg-white border border-[#e9e4d9] rounded-tl-none shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
-        )}>
-          {message.type === 'system' ? (
-            // System message with Q&A link button
-            <div className="space-y-3">
-              <p className="text-[13.5px] leading-relaxed break-words font-normal text-gray-800">
-                {message.content}
-              </p>
-              {message.systemData?.type === 'qa_started' && (
-                <div className="pt-2">
-                  <Button
-                    onClick={() => window.open(`/anonymous/answer/${message.systemData.publicId}`, '_blank')}
-                    className="bg-[#c7b793] hover:bg-[#b8a57e] text-white rounded-lg h-10 px-5 text-sm font-medium shadow-sm transition-all duration-200 w-full"
-                  >
-                    Answer Question
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : (
-            // Regular message
-            <>
-              {/* Header with sender info - only for received messages */}
-              {!isCurrentUser && (
-                <div className="mb-1.5 flex items-baseline justify-between gap-4">
-                  <p className="text-xs font-semibold text-[#a38c5b]">
-                    {message.sender.name}
-                  </p>
-                  {/* <span className="text-[10px] text-gray-400">
-                    {message.timestamp ? format(new Date(message.timestamp), 'h:mm a') : ''}
-                  </span> */}
-                </div>
-              )}
+        {/* Select mode checkbox (only own messages) */}
+        {selectMode && isCurrentUser && (
+          <div className="flex items-center mr-2 self-center">
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleSelect(message._id); }}
+              className="text-[#c7b793]"
+            >
+              {isSelected
+                ? <CheckSquare className="h-5 w-5" />
+                : <Square className="h-5 w-5 text-gray-400" />
+              }
+            </button>
+          </div>
+        )}
 
-              <p className={cn(
-                'text-[13.5px] leading-relaxed break-words font-normal',
-                isCurrentUser ? 'text-white' : 'text-gray-800'
+        <div className="relative">
+          <div className={cn(
+            'max-w-[280px] sm:max-w-sm rounded-2xl px-4 py-3.5 shadow-sm relative transition-all duration-150',
+            isCurrentUser
+              ? 'bg-[#c7b793] text-white ml-auto rounded-tr-none'
+              : 'bg-white border border-[#e9e4d9] rounded-tl-none shadow-[0_1px_2px_rgba(0,0,0,0.02)]',
+            isSelected && 'ring-2 ring-[#c7b793] ring-offset-1'
+          )}>
+            {message.type === 'system' ? (
+              // System message
+              <div className="space-y-3">
+                <p className="text-[13.5px] leading-relaxed break-words font-normal text-gray-800">
+                  {message.content}
+                </p>
+                {message.systemData?.type === 'qa_started' && (
+                  <div className="pt-2">
+                    <Button
+                      onClick={() => window.open(`/anonymous/answer/${message.systemData.publicId}`, '_blank')}
+                      className="bg-[#c7b793] hover:bg-[#b8a57e] text-white rounded-lg h-10 px-5 text-sm font-medium shadow-sm transition-all duration-200 w-full"
+                    >
+                      Answer Question
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Regular text message (with optional edit mode)
+              <>
+                {!isCurrentUser && (
+                  <div className="mb-1.5 flex items-baseline justify-between gap-4">
+                    <p className="text-xs font-semibold text-[#a38c5b]">
+                      {message.sender.name}
+                    </p>
+                  </div>
+                )}
+
+                {editingMessageId === message._id ? (
+                  // Inline edit input
+                  <div className="space-y-2">
+                    <Input
+                      ref={editInputRef}
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(); }
+                        if (e.key === 'Escape') cancelEdit();
+                      }}
+                      className="text-sm bg-white/20 border-white/40 text-white placeholder-white/60 rounded-lg h-8 focus:ring-white/30"
+                    />
+                    <div className="flex space-x-1">
+                      <button
+                        onClick={submitEdit}
+                        disabled={isEditing}
+                        className="flex-1 text-xs bg-white/20 hover:bg-white/30 rounded-lg py-1.5 font-medium transition-colors flex items-center justify-center space-x-1"
+                      >
+                        <Check className="h-3 w-3" />
+                        <span>{isEditing ? 'Saving...' : 'Save'}</span>
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="flex-1 text-xs bg-white/10 hover:bg-white/20 rounded-lg py-1.5 font-medium transition-colors flex items-center justify-center space-x-1"
+                      >
+                        <X className="h-3 w-3" />
+                        <span>Cancel</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className={cn(
+                    'text-[13.5px] leading-relaxed break-words font-normal',
+                    isCurrentUser ? 'text-white' : 'text-gray-800'
+                  )}>
+                    {message.content}
+                  </p>
+                )}
+              </>
+            )}
+
+            {/* Timestamp + edited label */}
+            <div className="flex items-center justify-end mt-1.5 space-x-1">
+              {message.isEdited && (
+                <span className={cn('text-[10px] italic', isCurrentUser ? 'text-white/70' : 'text-gray-400')}>
+                  edited
+                </span>
+              )}
+              <span className={cn(
+                'text-[10px]',
+                isCurrentUser ? 'text-white/85' : 'text-gray-400'
               )}>
-                {message.content}
-              </p>
-            </>
+                {message.timestamp ? format(new Date(message.timestamp), 'h:mm a') : ''}
+              </span>
+            </div>
+
+            {/* Message tail */}
+            <div className={cn(
+              'absolute top-0 w-3 h-3 overflow-hidden',
+              isCurrentUser ? '-right-2.5' : '-left-2.5'
+            )}>
+              <div className={cn(
+                'absolute w-3 h-3 transform rotate-45',
+                isCurrentUser
+                  ? 'bg-[#c7b793] -left-1.5 top-0'
+                  : 'bg-white border-l border-t border-[#e9e4d9] left-1.5 top-0'
+              )} />
+            </div>
+          </div>
+
+          {/* Context menu button (own messages, non-select mode, text only) */}
+          {isCurrentUser && !selectMode && message.type === 'text' && editingMessageId !== message._id && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setContextMenuMsgId(prev => prev === message._id ? null : message._id);
+              }}
+              className="absolute -top-1 -left-7 opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-gray-100 rounded-full h-6 w-6 flex items-center justify-center shadow-sm text-gray-400 hover:text-gray-600"
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </button>
           )}
 
-          {/* Timestamp at bottom */}
-          <div className="flex items-center justify-end mt-1.5">
-            <span className={cn(
-              'text-[10px]',
-              isCurrentUser ? 'text-white/85' : 'text-gray-400'
-            )}>
-              {message.timestamp ? format(new Date(message.timestamp), 'h:mm a') : ''}
-            </span>
-          </div>
-
-          {/* Message tail */}
-          <div className={cn(
-            'absolute top-0 w-3 h-3 overflow-hidden',
-            isCurrentUser ? '-right-2.5' : '-left-2.5'
-          )}>
-            <div className={cn(
-              'absolute w-3 h-3 transform rotate-45',
-              isCurrentUser
-                ? 'bg-[#c7b793] -left-1.5 top-0'
-                : 'bg-white border-l border-t border-[#e9e4d9] left-1.5 top-0'
-            )} />
-          </div>
+          {/* Context dropdown */}
+          {showContextMenu && (
+            <div
+              className="absolute right-0 bottom-full mb-1 bg-white border border-gray-100 rounded-xl shadow-lg z-20 overflow-hidden min-w-[120px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => startEdit(message)}
+                className="w-full flex items-center space-x-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#faf8f5] transition-colors"
+              >
+                <Edit2 className="h-3.5 w-3.5 text-[#c7b793]" />
+                <span>Edit</span>
+              </button>
+              <button
+                onClick={() => {
+                  setSelectMode(true);
+                  toggleSelect(message._id);
+                  setContextMenuMsgId(null);
+                }}
+                className="w-full flex items-center space-x-2 px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -339,27 +548,24 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'online':
-        return 'bg-green-500';
-      case 'away':
-        return 'bg-yellow-500';
-      default:
-        return 'bg-gray-400';
+      case 'online': return 'bg-green-500';
+      case 'away': return 'bg-yellow-500';
+      default: return 'bg-gray-400';
     }
   };
 
   return (
     <div className="flex flex-col h-screen bg-[#faf8f5] overflow-hidden">
       {/* Header */}
-      <div className="bg-white border-b border-[#c7b793]/15 px-4 py-3 flex items-center justify-between min-h-[64px]">
+      <div className="bg-white border-b border-[#c7b793]/15 px-4 py-3 flex items-center justify-between min-h-[64px] flex-shrink-0">
         <div className="flex items-center space-x-3 flex-1 min-w-0">
           <Button
             variant="ghost"
             size="icon"
-            onClick={onBack}
+            onClick={selectMode ? toggleSelectMode : onBack}
             className="md:hidden min-h-[44px] min-w-[44px]"
           >
-            <ArrowLeft className="h-5 w-5" />
+            {selectMode ? <X className="h-5 w-5" /> : <ArrowLeft className="h-5 w-5" />}
           </Button>
 
           <Avatar className="h-10 w-10 border border-[#c7b793]/15">
@@ -371,30 +577,63 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
 
           <div>
             <h1 className="text-base font-semibold text-gray-900 truncate">
-              {conversation.participant?.name || conversation.participant?.email}
+              {selectMode
+                ? `${selectedIds.size} selected`
+                : (conversation.participant?.name || conversation.participant?.email)
+              }
             </h1>
             <p className="text-sm text-gray-500">
               {isTyping
                 ? 'typing...'
-                : conversation.participant?.status === 'online' 
-                  ? 'online' 
+                : conversation.participant?.status === 'online'
+                  ? 'online'
                   : 'offline'
               }
             </p>
           </div>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-gray-500 hover:text-gray-700 p-2 min-h-[44px] min-w-[44px]"
-        >
-          <MoreVertical className="h-5 w-5" />
-        </Button>
+        <div className="flex items-center space-x-1">
+          {selectMode ? (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0 || isDeleting}
+                className="text-red-500 hover:text-red-600 hover:bg-red-50 min-h-[44px] min-w-[44px]"
+                title="Delete selected"
+              >
+                {isDeleting
+                  ? <div className="h-4 w-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                  : <Trash2 className="h-5 w-5" />
+                }
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleSelectMode}
+                className="text-gray-500 hover:text-gray-700 min-h-[44px] min-w-[44px]"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleSelectMode}
+              className="text-gray-500 hover:text-gray-700 p-2 min-h-[44px] min-w-[44px]"
+              title="Select messages"
+            >
+              <CheckSquare className="h-5 w-5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto bg-[#faf8f5] -webkit-overflow-scrolling-touch scroll-smooth">
+      <div className="flex-1 overflow-y-auto bg-[#faf8f5] scroll-smooth">
         <div className="max-w-4xl mx-auto space-y-4 p-3 sm:p-4 pb-24 sm:pb-20">
           {isLoading ? (
             <div className="flex items-center justify-center min-h-[400px]">
@@ -424,95 +663,120 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
       </div>
 
       {/* Message Input */}
-      <div className="bg-white border-t border-[#c7b793]/15 p-3 sm:p-4 shadow-lg sticky bottom-0">
-        <div className="max-w-4xl mx-auto">
-          <form onSubmit={sendMessage} className="relative">
-            <div className="relative">
-              <Input
-                value={newMessage}
-                onChange={(e) => {
-                  setNewMessage(e.target.value);
-                  if (e.target.value.trim()) {
-                    onType();
-                  } else {
-                    stopTyping();
-                  }
-                }}
-                placeholder={`Message ${conversation.participant?.name || conversation.participant?.email}...`}
-                className="pl-4 pr-12 sm:pl-5 sm:pr-14 py-3.5 rounded-full border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#c7b793] focus:ring-2 focus:ring-[#c7b793]/10 transition-all duration-200 text-sm min-h-[44px] text-black resize-none"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage(e);
-                  }
-                }}
-              />
-              <Button
-                type="submit"
-                disabled={!newMessage.trim()}
-                className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full p-0 transition-all duration-200 ${!newMessage.trim()
-                  ? 'bg-gray-100 text-gray-300'
-                  : 'bg-[#c7b793] hover:bg-[#b8a57e] text-white shadow-md transform hover:scale-105'
-                  }`}
-              >
-                <Send className="h-3.5 w-3.5" />
-                <span className="sr-only">Send message</span>
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-between mt-3 px-1">
-              <div className="flex space-x-2">
-                <button
-                  type="button"
-                  className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
-                  title="Attach file"
+      {!selectMode && (
+        <div className="bg-white border-t border-[#c7b793]/15 p-3 sm:p-4 shadow-lg flex-shrink-0">
+          <div className="max-w-4xl mx-auto">
+            <form onSubmit={sendMessage} className="relative">
+              <div className="relative">
+                <Input
+                  value={newMessage}
+                  onChange={(e) => {
+                    setNewMessage(e.target.value);
+                    if (e.target.value.trim()) {
+                      onType();
+                    } else {
+                      stopTyping();
+                    }
+                  }}
+                  placeholder={`Message ${conversation.participant?.name || conversation.participant?.email}...`}
+                  className="pl-4 pr-12 sm:pl-5 sm:pr-14 py-3.5 rounded-full border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#c7b793] focus:ring-2 focus:ring-[#c7b793]/10 transition-all duration-200 text-sm min-h-[44px] text-black resize-none"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage(e);
+                    }
+                  }}
+                />
+                <Button
+                  type="submit"
+                  disabled={!newMessage.trim()}
+                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full p-0 transition-all duration-200 ${!newMessage.trim()
+                    ? 'bg-gray-100 text-gray-300'
+                    : 'bg-[#c7b793] hover:bg-[#b8a57e] text-white shadow-md transform hover:scale-105'
+                    }`}
                 >
-                  <Paperclip className="w-5 h-5" />
-                </button>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                    className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
-                    title="Add emoji"
-                  >
-                    <Smile className="w-5 h-5" />
-                  </button>
-                  {showEmojiPicker && (
-                    <div className="absolute bottom-14 left-0 z-50">
-                      <div className="bg-white rounded-lg shadow-xl border border-gray-200 p-2">
-                        <div className="flex items-center justify-between mb-2 px-2">
-                          <span className="text-xs font-medium text-gray-600">Emoji</span>
-                          <button
-                            onClick={() => setShowEmojiPicker(false)}
-                            className="text-gray-400 hover:text-gray-600"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                  <Send className="h-3.5 w-3.5" />
+                  <span className="sr-only">Send message</span>
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between mt-3 px-1">
+                <div className="flex space-x-2">
+                  {/* Emoji picker */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                      className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+                      title="Add emoji"
+                    >
+                      <Smile className="w-5 h-5" />
+                    </button>
+                    {showEmojiPicker && (
+                      <div className="absolute bottom-14 left-0 z-50">
+                        <div className="bg-white rounded-lg shadow-xl border border-gray-200 p-2">
+                          <div className="flex items-center justify-between mb-2 px-2">
+                            <span className="text-xs font-medium text-gray-600">Emoji</span>
+                            <button
+                              onClick={() => setShowEmojiPicker(false)}
+                              className="text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <EmojiPicker
+                            onEmojiClick={(emojiObject) => {
+                              setNewMessage(prev => prev + emojiObject.emoji);
+                              setShowEmojiPicker(false);
+                            }}
+                            width={280}
+                            height={350}
+                          />
                         </div>
-                        <EmojiPicker
-                          onEmojiClick={(emojiObject) => {
-                            setNewMessage(prev => prev + emojiObject.emoji);
-                            setShowEmojiPicker(false);
-                          }}
-                          width={280}
-                          height={350}
-                        />
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center">
+                  <span className="text-xs text-gray-400">
+                    {newMessage.length}/500
+                  </span>
                 </div>
               </div>
-
-              <div className="flex items-center">
-                <span className="text-xs text-gray-400">
-                  {newMessage.length}/500
-                </span>
-              </div>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Select mode action bar */}
+      {selectMode && (
+        <div className="bg-white border-t border-[#c7b793]/15 p-4 flex-shrink-0">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <p className="text-sm text-gray-500">
+              {selectedIds.size === 0 ? 'Tap your messages to select' : `${selectedIds.size} message${selectedIds.size !== 1 ? 's' : ''} selected`}
+            </p>
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleSelectMode}
+                className="border-gray-200 text-gray-600 rounded-full text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0 || isDeleting}
+                className="bg-red-500 hover:bg-red-600 text-white rounded-full text-xs"
+              >
+                {isDeleting ? 'Deleting...' : `Delete ${selectedIds.size > 0 ? selectedIds.size : ''}`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

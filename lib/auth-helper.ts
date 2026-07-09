@@ -2,6 +2,26 @@ import { NextRequest } from 'next/server';
 import { verifyToken } from '@/lib/auth-simple';
 import dbConnect from '@/lib/mongodb';
 import { PrivateUser } from '@/lib/models';
+import { memoryCache } from '@/lib/cache';
+
+async function getCachedUser(userId: string) {
+  const cacheKey = `user:${userId}`;
+  const cached = memoryCache.get(cacheKey);
+  if (cached) return cached;
+
+  await dbConnect();
+  const user = await PrivateUser.findById(userId);
+  if (!user) return null;
+
+  const userData = {
+    id: user._id.toString(),
+    email: user.email,
+    name: user.name,
+    image: user.image
+  };
+  memoryCache.set(cacheKey, userData, 30000); // Cache for 30 seconds
+  return userData;
+}
 
 export async function getAuthenticatedUser(request: NextRequest) {
   try {
@@ -12,17 +32,8 @@ export async function getAuthenticatedUser(request: NextRequest) {
       const decoded = verifyToken(cookieToken);
 
       if (decoded && decoded.userId) {
-        await dbConnect();
-        const user = await PrivateUser.findById(decoded.userId);
-
-        if (user) {
-          return {
-            id: user._id.toString(),
-            email: user.email,
-            name: user.name,
-            image: user.image
-          };
-        }
+        const user = await getCachedUser(decoded.userId);
+        if (user) return user;
       }
     }
 
@@ -34,17 +45,8 @@ export async function getAuthenticatedUser(request: NextRequest) {
         // Try to decode as base64 first (for simple tokens)
         const decodedData = JSON.parse(atob(token));
         if (decodedData && decodedData.userId) {
-          await dbConnect();
-          const user = await PrivateUser.findById(decodedData.userId);
-
-          if (user) {
-            return {
-              id: user._id.toString(),
-              email: user.email,
-              name: user.name,
-              image: user.image
-            };
-          }
+          const user = await getCachedUser(decodedData.userId);
+          if (user) return user;
         }
       } catch (error) {
         // If base64 decoding fails, try JWT format
@@ -52,17 +54,8 @@ export async function getAuthenticatedUser(request: NextRequest) {
           const decoded = verifyToken(token);
 
           if (decoded && decoded.userId) {
-            await dbConnect();
-            const user = await PrivateUser.findById(decoded.userId);
-
-            if (user) {
-              return {
-                id: user._id.toString(),
-                email: user.email,
-                name: user.name,
-                image: user.image
-              };
-            }
+            const user = await getCachedUser(decoded.userId);
+            if (user) return user;
           }
         } catch (jwtError) {
           console.error('Error verifying JWT token:', jwtError);

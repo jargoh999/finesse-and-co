@@ -31,7 +31,7 @@ interface Conversation {
 }
 
 interface ConversationListProps {
-  
+
   conversations: Conversation[];
   selectedConversation: Conversation | null;
   onSelectConversation: (conversation: Conversation) => void;
@@ -87,7 +87,7 @@ export function ConversationList({
                 <p className="text-sm text-gray-500 truncate">
                   {conversation.lastMessage.type === 'system' ? (
                     <span className="text-[#a38c5b] font-medium">
-                       Q&A: {conversation.lastMessage.systemData?.question || 'New question'}
+                      Q&A: {conversation.lastMessage.systemData?.question || 'New question'}
                     </span>
                   ) : (
                     <>
