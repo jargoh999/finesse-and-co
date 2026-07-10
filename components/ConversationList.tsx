@@ -1,7 +1,6 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 import { cn } from '@/lib/utils';
 
@@ -72,19 +71,32 @@ export function ConversationList({
 
             {/* Conversation info */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-semibold text-gray-900 truncate">
+            <div className="flex items-center justify-between mb-1">
+                <h3 className={cn(
+                  'text-sm truncate',
+                  conversation.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-semibold text-gray-900'
+                )}>
                   {conversation.participant?.name || conversation.participant?.email}
                 </h3>
-                {conversation.lastMessageAt && (
-                  <span className="text-xs text-gray-400">
-                    {formatDistanceToNow(new Date(conversation.lastMessageAt), { addSuffix: false })}
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                  {conversation.lastMessageAt && (
+                    <span className="text-xs text-gray-400">
+                      {formatDistanceToNow(new Date(conversation.lastMessageAt), { addSuffix: false })}
+                    </span>
+                  )}
+                  {conversation.unreadCount > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[#c7b793] text-white text-[11px] font-bold">
+                      {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {conversation.lastMessage ? (
-                <p className="text-sm text-gray-500 truncate">
+                <p className={cn(
+                  'text-sm truncate',
+                  conversation.unreadCount > 0 ? 'text-gray-800 font-medium' : 'text-gray-500'
+                )}>
                   {conversation.lastMessage.type === 'system' ? (
                     <span className="text-[#a38c5b] font-medium">
                       Q&A: {conversation.lastMessage.systemData?.question || 'New question'}

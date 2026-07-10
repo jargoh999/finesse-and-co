@@ -212,3 +212,30 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// Reset unread count when a conversation is opened
+export async function PATCH(request: NextRequest) {
+  try {
+    await dbConnect();
+
+    const user = await getAuthenticatedUser(request);
+    if (!user?.email) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
+    const { conversationId } = await request.json();
+    if (!conversationId) {
+      return NextResponse.json({ error: 'Conversation ID is required' }, { status: 400 });
+    }
+
+    await PrivateUser.updateOne(
+      { _id: user.id, 'conversations.conversationId': conversationId },
+      { $set: { 'conversations.$.unreadCount': 0 } }
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error resetting unread count:', error);
+    return NextResponse.json({ error: 'Failed to reset unread count' }, { status: 500 });
+  }
+}

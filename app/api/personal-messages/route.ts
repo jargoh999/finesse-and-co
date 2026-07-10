@@ -66,11 +66,37 @@ export async function POST(request: NextRequest) {
     const message = new Message(messageData);
     await message.save();
 
-    // Update conversation's last message using direct update (saves 1 DB call)
-    await Conversation.updateOne(
-      { _id: conversationId },
-      { $set: { lastMessage: message._id } }
-    );
+    // Identify the recipient (the other participant)
+    const recipientId = participants.find((p: string) => p !== user.id);
+
+    // Update conversation's last message + update both participants' lastMessageAt
+    // and increment unreadCount for the recipient — all in parallel
+    await Promise.all([
+      Conversation.updateOne(
+        { _id: conversationId },
+        { $set: { lastMessage: message._id } }
+      ),
+      // Update sender: reset their unreadCount to 0 (they're actively chatting), update lastMessageAt
+      PrivateUser.updateOne(
+        { _id: user.id, 'conversations.conversationId': conversationId },
+        {
+          $set: {
+            'conversations.$.lastMessageAt': new Date(),
+            'conversations.$.unreadCount': 0
+          }
+        }
+      ),
+      // Update recipient: increment unreadCount + update lastMessageAt
+      recipientId
+        ? PrivateUser.updateOne(
+            { _id: recipientId, 'conversations.conversationId': conversationId },
+            {
+              $inc: { 'conversations.$.unreadCount': 1 },
+              $set: { 'conversations.$.lastMessageAt': new Date() }
+            }
+          )
+        : Promise.resolve()
+    ]);
 
     // Construct response manually to save another DB call
     const populatedMessage = {
