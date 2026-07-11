@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     // Get recent messages for this conversation
     const messages = await Message.find({ conversation: conversation._id })
-      .populate('sender', 'name email')
+      .populate('sender', 'name email image')
       .sort({ createdAt: 1 })
       .limit(50)
       .lean();
@@ -136,17 +136,8 @@ export async function GET(request: NextRequest) {
 
     // Get user's conversations with populated data
     const userWithConversations = await PrivateUser.findById(user.id)
-      .populate('conversations.participant', 'name email status image')
-      .populate({
-        path: 'conversations.conversationId',
-        populate: {
-          path: 'lastMessage',
-          populate: {
-            path: 'sender',
-            select: 'name email'
-          }
-        }
-      });
+      .populate('conversations.participant', 'name email image status')
+      .populate('conversations.conversationId');
 
     if (!userWithConversations) {
       return NextResponse.json(
@@ -155,49 +146,70 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Map conversations and filter out invalid references
-    const conversationsWithMessages = userWithConversations.conversations.map((conv: any) => {
-      // Skip if conversationId is null or not populated
-      if (!conv.conversationId || !conv.conversationId._id) {
-        console.warn('Invalid conversation found:', {
-          conversationId: conv.conversationId,
-          participant: conv.participant,
-          lastMessageAt: conv.lastMessageAt
-        });
+    // Debug: Log the conversations structure
+    console.log('User conversations:', JSON.stringify(userWithConversations.conversations, null, 2));
 
-        // Clean up invalid conversation reference asynchronously in background
-        PrivateUser.findByIdAndUpdate(user.id, {
-          $pull: {
-            conversations: { conversationId: conv.conversationId }
+    // Get conversations with their latest messages
+    const conversationsWithMessages = await Promise.all(
+      userWithConversations.conversations.map(async (conv: any) => {
+        // Skip if conversationId is null or not populated
+        if (!conv.conversationId || !conv.conversationId._id) {
+          console.warn('Invalid conversation found:', {
+            conversationId: conv.conversationId,
+            participant: conv.participant,
+            lastMessageAt: conv.lastMessageAt
+          });
+
+          // Clean up invalid conversation reference
+          try {
+            await PrivateUser.findByIdAndUpdate(user.id, {
+              $pull: {
+                conversations: { conversationId: conv.conversationId }
+              }
+            });
+            console.log('Removed invalid conversation reference');
+          } catch (cleanupError) {
+            console.error('Error cleaning up invalid conversation:', cleanupError);
           }
-        }).catch(() => {
-        });
+
+          return {
+            _id: null, // or handle this case appropriately
+            participants: [],
+            participant: conv.participant,
+            lastMessage: null,
+            lastMessageAt: conv.lastMessageAt,
+            unreadCount: conv.unreadCount,
+            createdAt: null,
+            error: 'Invalid conversation'
+          };
+        }
+
+        const messages = await Message.find({ conversation: conv.conversationId._id })
+          .sort({ createdAt: -1 })
+          .limit(1)
+          .populate('sender', 'name email image')
+          .lean();
 
         return {
-          _id: null,
-          participants: [],
+          _id: conv.conversationId._id,
+          participants: conv.conversationId.participants,
           participant: conv.participant,
-          lastMessage: null,
+          lastMessage: messages[0] || null,
           lastMessageAt: conv.lastMessageAt,
           unreadCount: conv.unreadCount,
-          createdAt: null,
-          error: 'Invalid conversation'
+          createdAt: conv.conversationId.createdAt
         };
+      })
+    );
+
+    // Filter out invalid conversations and log warnings
+    const validConversations = conversationsWithMessages.filter(conv => {
+      if (!conv._id) {
+        console.warn('Skipping invalid conversation:', conv);
+        return false;
       }
-
-      return {
-        _id: conv.conversationId._id,
-        participants: conv.conversationId.participants,
-        participant: conv.participant,
-        lastMessage: conv.conversationId.lastMessage || null,
-        lastMessageAt: conv.lastMessageAt,
-        unreadCount: conv.unreadCount,
-        createdAt: conv.conversationId.createdAt
-      };
+      return true;
     });
-
-    // Filter out invalid conversations
-    const validConversations = conversationsWithMessages.filter((conv: any) => conv._id);
 
     return NextResponse.json({
       success: true,
@@ -210,32 +222,5 @@ export async function GET(request: NextRequest) {
       { error: 'Failed to fetch conversations' },
       { status: 500 }
     );
-  }
-}
-
-// Reset unread count when a conversation is opened
-export async function PATCH(request: NextRequest) {
-  try {
-    await dbConnect();
-
-    const user = await getAuthenticatedUser(request);
-    if (!user?.email) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-
-    const { conversationId } = await request.json();
-    if (!conversationId) {
-      return NextResponse.json({ error: 'Conversation ID is required' }, { status: 400 });
-    }
-
-    await PrivateUser.updateOne(
-      { _id: user.id, 'conversations.conversationId': conversationId },
-      { $set: { 'conversations.$.unreadCount': 0 } }
-    );
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error resetting unread count:', error);
-    return NextResponse.json({ error: 'Failed to reset unread count' }, { status: 500 });
   }
 }

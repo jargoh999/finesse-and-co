@@ -63,8 +63,7 @@ export default function PersonalChatPage() {
   const [anonymousConversations, setAnonymousConversations] = useState<AnonymousConversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [selectedAnonymousConversation, setSelectedAnonymousConversation] = useState<AnonymousConversation | null>(null);
-  const [isLoadingConversations, setIsLoadingConversations] = useState(true);
-  const [isLoadingAnonymous, setIsLoadingAnonymous] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'chats' | 'anonymous'>('chats');
   const [showNewDMDialog, setShowNewDMDialog] = useState(false);
@@ -87,9 +86,47 @@ export default function PersonalChatPage() {
     }
   }, [currentUser]);
 
+  // Real-time conversation list updates via SSE
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const eventSource = new EventSource('/api/conversations/stream');
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'conversation_updated' && data.conversationId) {
+          setConversations(prev =>
+            prev.map(c =>
+              c._id === data.conversationId
+                ? {
+                    ...c,
+                    lastMessage: data.lastMessage,
+                    unreadCount: data.unreadCount,
+                    lastMessageAt: new Date(data.lastMessageAt)
+                  }
+                : c
+            )
+          );
+        }
+      } catch (error) {
+        console.error('Error parsing conversations SSE message:', error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('Conversations SSE connection error:', error);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [currentUser]);
+
   const loadConversations = async (showLoading = true) => {
     try {
-      if (showLoading) setIsLoadingConversations(true);
+      if (showLoading) setIsLoading(true);
       const response = await fetch('/api/conversations');
       if (response.ok) {
         const data = await response.json();
@@ -101,14 +138,14 @@ export default function PersonalChatPage() {
     } catch (error) {
       console.error('Error loading conversations:', error);
     } finally {
-      if (showLoading) setIsLoadingConversations(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 
   // IMPORTANT: Load anonymous conversations separately for the Anonymous DM tab
   const loadAnonymousConversations = async (showLoading = true) => {
     try {
-      if (showLoading) setIsLoadingAnonymous(true);
+      if (showLoading) setIsLoading(true);
       const response = await fetch('/api/anonymous-dm');
       if (response.ok) {
         const data = await response.json();
@@ -117,7 +154,7 @@ export default function PersonalChatPage() {
     } catch (error) {
       console.error('Error loading anonymous DMs:', error);
     } finally {
-      if (showLoading) setIsLoadingAnonymous(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -349,7 +386,7 @@ export default function PersonalChatPage() {
         <ScrollArea className="flex-1 bg-white">
           {activeTab === 'chats' ? (
             <>
-              {isLoadingConversations ? (
+              {isLoading ? (
                 <div className="flex items-center justify-center h-48">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#c7b793]"></div>
                 </div>
@@ -368,20 +405,6 @@ export default function PersonalChatPage() {
                   conversations={filteredConversations}
                   selectedConversation={selectedConversation}
                   onSelectConversation={(conversation) => {
-                    // Immediately clear unread badge in UI
-                    if (conversation.unreadCount > 0) {
-                      setConversations(prev =>
-                        prev.map(c =>
-                          c._id === conversation._id ? { ...c, unreadCount: 0 } : c
-                        )
-                      );
-                      // Persist reset to DB (fire-and-forget)
-                      fetch('/api/conversations', {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ conversationId: conversation._id }),
-                      }).catch(() => {});
-                    }
                     setSelectedConversation(conversation);
                   }}
                   currentUser={currentUser}
@@ -426,7 +449,7 @@ export default function PersonalChatPage() {
 
                 {/* Anonymous DM List */}
                 <ScrollArea className="flex-1 bg-white">
-                  {isLoadingAnonymous ? (
+                  {isLoading ? (
                     <div className="flex items-center justify-center h-48">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#c7b793]"></div>
                     </div>

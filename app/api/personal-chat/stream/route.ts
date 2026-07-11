@@ -1,12 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth-helper';
 import dbConnect from '@/lib/mongodb';
 import { Message, Conversation } from '@/lib/models';
-import { Types } from 'mongoose';
 import { chatEmitter } from '@/lib/chat-emitter';
 import { memoryCache } from '@/lib/cache';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     // Get the authenticated user
     //@ts-ignore

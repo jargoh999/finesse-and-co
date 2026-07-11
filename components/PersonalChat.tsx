@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -16,7 +17,7 @@ import {
   Edit2,
   Check,
 } from 'lucide-react';
-import { format } from 'date-fns/format';
+import { format } from 'date-fns';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { cn } from '@/lib/utils';
 import EmojiPicker from 'emoji-picker-react';
@@ -71,6 +72,8 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   const [isConnected, setIsConnected] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const pendingMessageIdRef = useRef<string | null>(null);
 
   // Select mode for multi-delete
   const [selectMode, setSelectMode] = useState(false);
@@ -87,8 +90,10 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
-  // PERF: Track timestamp of latest message to avoid re-fetching full history each poll
+  
+  // Track timestamp and length to safely prevent recursive rendering loops
   const lastTimestampRef = useRef<string>(new Date(0).toISOString());
+  const messagesCountRef = useRef<number>(0);
 
   // Validate conversation object
   if (!conversation || !conversation._id) {
@@ -103,6 +108,15 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     );
   }
 
+  // Set up typing indicator
+  const { onType, stopTyping } = useTypingIndicator(
+    conversation._id,
+    (convId, typing) => {
+      setIsTyping(typing);
+    },
+    3000
+  );
+
   // Load messages when conversation changes
   useEffect(() => {
     loadMessages();
@@ -113,10 +127,33 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     };
   }, [conversation._id]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // FIX: Scroll only executes when the actual array length changes, breaking the infinite cycle
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (messages.length !== messagesCountRef.current) {
+      messagesCountRef.current = messages.length;
+      scrollToBottom();
+    }
+  }, [messages.length]);
+
+  // Reset timestamp when conversation changes to avoid stale polling state
+  useEffect(() => {
+    lastTimestampRef.current = new Date(0).toISOString();
+    setIsSending(false);
+    pendingMessageIdRef.current = null;
+  }, [conversation._id]);
+
+  // Confirm send state when SSE delivers the pending message
+  useEffect(() => {
+    if (isSending && pendingMessageIdRef.current) {
+      const timeout = setTimeout(() => {
+        setNewMessage('');
+        stopTyping();
+        setIsSending(false);
+        pendingMessageIdRef.current = null;
+      }, 4000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isSending, messages, stopTyping]);
 
   // Focus edit input when editing
   useEffect(() => {
@@ -133,16 +170,8 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     return () => window.removeEventListener('click', handler);
   }, [contextMenuMsgId]);
 
-  // Set up typing indicator
-  const { onType, stopTyping } = useTypingIndicator(
-    conversation._id,
-    (convId, typing) => {
-      setIsTyping(typing);
-    },
-    3000
-  );
-
   const setupRealTimeConnection = () => {
+    cleanupRealTimeConnection(); // Clean up existing routines first
     if (typeof EventSource !== 'undefined') {
       setupSSEConnection();
     } else {
@@ -157,7 +186,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
 
       eventSource.onopen = () => {
         setIsConnected(true);
-        console.log('Connected to personal chat stream');
       };
 
       eventSource.onmessage = (event) => {
@@ -167,8 +195,16 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
           if (data.type === 'new_message' && data.message) {
             setMessages(prev => {
               const exists = prev.some(m => m._id === data.message._id);
-              return exists ? prev : [...prev, data.message];
+              if (exists) return prev;
+              return [...prev, data.message];
             });
+
+            if (pendingMessageIdRef.current && data.message._id === pendingMessageIdRef.current) {
+              setNewMessage('');
+              stopTyping();
+              setIsSending(false);
+              pendingMessageIdRef.current = null;
+            }
           } else if (data.type === 'typing' && data.userId !== currentUser?.email) {
             setIsTyping(data.isTyping);
           } else if (data.type === 'heartbeat') {
@@ -179,10 +215,10 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
         }
       };
 
-      eventSource.onerror = (error) => {
-        console.error('SSE connection error:', error);
+      eventSource.onerror = () => {
         setIsConnected(false);
-        setupPollingConnection();
+        cleanupRealTimeConnection();
+        setupPollingConnection(); // Fallback cleanly to polling without compounding timers
       };
 
     } catch (error) {
@@ -192,7 +228,8 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   };
 
   const setupPollingConnection = () => {
-    // PERF: Use a ref so the interval always reads the latest timestamp without stale closure
+    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+
     pollingIntervalRef.current = setInterval(async () => {
       try {
         const response = await fetch(
@@ -202,7 +239,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
         if (response.ok) {
           const data = await response.json();
           if (data.messages && data.messages.length > 0) {
-            // Update the timestamp ref to the newest message
             const newest = data.messages[data.messages.length - 1];
             if (newest?.timestamp) {
               lastTimestampRef.current = new Date(newest.timestamp).toISOString();
@@ -218,7 +254,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
       } catch (error) {
         console.error('Polling error:', error);
       }
-    }, 3000); // 3s — SSE handles real-time; this is fallback only
+    }, 4000); // Bumped to 4s to minimize background connection choking
   };
 
   const cleanupRealTimeConnection = () => {
@@ -226,24 +262,21 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
-
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
     }
-
     setIsConnected(false);
   };
 
   const loadMessages = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/personal-messages?conversationId=${conversation._id}`);
+      const response = await fetch(`/api/personal-messages?conversationId=${conversation._id}&limit=200`);
       if (response.ok) {
         const data = await response.json();
         const msgs = data.messages || [];
         setMessages(msgs);
-        // Seed the timestamp ref with the newest message so polling starts from there
         if (msgs.length > 0) {
           lastTimestampRef.current = new Date(msgs[msgs.length - 1].timestamp).toISOString();
         }
@@ -255,11 +288,13 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     }
   };
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const sendMessage = async (e?: React.FormEvent | React.KeyboardEvent) => {
+    if (e) e.preventDefault();
 
-    if (!newMessage.trim()) return;
+    const cleanMessage = newMessage.trim();
+    if (!cleanMessage || isSending) return;
 
+    setIsSending(true);
     try {
       const response = await fetch('/api/personal-messages', {
         method: 'POST',
@@ -268,20 +303,23 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
         },
         body: JSON.stringify({
           conversationId: conversation._id,
-          content: newMessage.trim(),
+          content: cleanMessage,
           type: 'text'
         }),
       });
 
       if (response.ok) {
-        setNewMessage('');
-        stopTyping();
-        // Real-time stream will automatically show the new message
+        const data = await response.json();
+        pendingMessageIdRef.current = data.message?._id || null;
       } else {
-        console.error('Error sending message');
+        setIsSending(false);
+        pendingMessageIdRef.current = null;
+        console.error('Backend returned an error trying to save the message');
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      setIsSending(false);
+      pendingMessageIdRef.current = null;
+      console.error('Network error during sendMessage:', error);
     }
   };
 
@@ -404,7 +442,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
             isSelected && 'ring-2 ring-[#c7b793] ring-offset-1'
           )}>
             {message.type === 'system' ? (
-              // System message
               <div className="space-y-3">
                 <p className="text-[13.5px] leading-relaxed break-words font-normal text-gray-800">
                   {message.content}
@@ -421,7 +458,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                 )}
               </div>
             ) : (
-              // Regular text message (with optional edit mode)
               <>
                 {!isCurrentUser && (
                   <div className="mb-1.5 flex items-baseline justify-between gap-4">
@@ -432,7 +468,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                 )}
 
                 {editingMessageId === message._id ? (
-                  // Inline edit input
                   <div className="space-y-2">
                     <Input
                       ref={editInputRef}
@@ -473,7 +508,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
               </>
             )}
 
-            {/* Timestamp + edited label */}
             <div className="flex items-center justify-end mt-1.5 space-x-1">
               {message.isEdited && (
                 <span className={cn('text-[10px] italic', isCurrentUser ? 'text-white/70' : 'text-gray-400')}>
@@ -488,7 +522,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
               </span>
             </div>
 
-            {/* Message tail */}
             <div className={cn(
               'absolute top-0 w-3 h-3 overflow-hidden',
               isCurrentUser ? '-right-2.5' : '-left-2.5'
@@ -502,7 +535,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
             </div>
           </div>
 
-          {/* Context menu button (own messages, non-select mode, text only) */}
           {isCurrentUser && !selectMode && message.type === 'text' && editingMessageId !== message._id && (
             <button
               onClick={(e) => {
@@ -515,7 +547,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
             </button>
           )}
 
-          {/* Context dropdown */}
           {showContextMenu && (
             <div
               className="absolute right-0 bottom-full mb-1 bg-white border border-gray-100 rounded-xl shadow-lg z-20 overflow-hidden min-w-[120px]"
@@ -544,14 +575,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
         </div>
       </div>
     );
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return 'bg-green-500';
-      case 'away': return 'bg-yellow-500';
-      default: return 'bg-gray-400';
-    }
   };
 
   return (
@@ -650,7 +673,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
               </div>
               <h3 className="text-base font-semibold text-gray-800 mb-1.5">Encrypt communication channel</h3>
               <p className="text-gray-500 max-w-xs mb-6 text-xs leading-relaxed">
-                Send an initial message to establish a zero-knowledge communication link with {conversation.participant?.name || conversation.participant?.email}.
+                Send an initial message to establish a communication link with {conversation.participant?.name || conversation.participant?.email}.
               </p>
             </div>
           ) : (
@@ -679,8 +702,8 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                     }
                   }}
                   placeholder={`Message ${conversation.participant?.name || conversation.participant?.email}...`}
-                  className="pl-4 pr-12 sm:pl-5 sm:pr-14 py-3.5 rounded-full border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#c7b793] focus:ring-2 focus:ring-[#c7b793]/10 transition-all duration-200 text-sm min-h-[44px] text-black resize-none"
-                  onKeyPress={(e) => {
+                  className="pl-4 pr-12 sm:pl-5 sm:pr-14 py-3.5 rounded-full border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#c7b793] focus:ring-2 focus:ring-[#c7b793]/10 transition-all duration-200 text-sm min-h-[44px] text-black"
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       sendMessage(e);
@@ -689,20 +712,25 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                 />
                 <Button
                   type="submit"
-                  disabled={!newMessage.trim()}
-                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full p-0 transition-all duration-200 ${!newMessage.trim()
+                  disabled={!newMessage.trim() || isSending}
+                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full p-0 transition-all duration-200 ${isSending
                     ? 'bg-gray-100 text-gray-300'
-                    : 'bg-[#c7b793] hover:bg-[#b8a57e] text-white shadow-md transform hover:scale-105'
+                    : !newMessage.trim()
+                      ? 'bg-gray-100 text-gray-300'
+                      : 'bg-[#c7b793] hover:bg-[#b8a57e] text-white shadow-md transform hover:scale-105'
                     }`}
                 >
-                  <Send className="h-3.5 w-3.5" />
+                  {isSending ? (
+                    <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
                   <span className="sr-only">Send message</span>
                 </Button>
               </div>
 
               <div className="flex items-center justify-between mt-3 px-1">
                 <div className="flex space-x-2">
-                  {/* Emoji picker */}
                   <div className="relative">
                     <button
                       type="button"
@@ -718,6 +746,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                           <div className="flex items-center justify-between mb-2 px-2">
                             <span className="text-xs font-medium text-gray-600">Emoji</span>
                             <button
+                              type="button"
                               onClick={() => setShowEmojiPicker(false)}
                               className="text-gray-400 hover:text-gray-600"
                             >
