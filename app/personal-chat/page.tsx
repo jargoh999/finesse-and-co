@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,6 +67,8 @@ export default function PersonalChatPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'chats' | 'anonymous'>('chats');
   const [showNewDMDialog, setShowNewDMDialog] = useState(false);
+  const conversationsLoadedRef = useRef(false);
+  const anonymousConversationsLoadedRef = useRef(false);
 
   // Check authentication
   useEffect(() => {
@@ -126,35 +128,35 @@ export default function PersonalChatPage() {
 
   const loadConversations = async (showLoading = true) => {
     try {
-      if (showLoading) setIsLoading(true);
+      if (showLoading && !conversationsLoadedRef.current) setIsLoading(true);
       const response = await fetch('/api/conversations');
       if (response.ok) {
         const data = await response.json();
         const validConversations = (data.conversations || []).filter((conv: Conversation) => conv._id);
         setConversations(validConversations);
-      } else {
-        console.error('Failed to load conversations:', response.status, response.statusText);
+        conversationsLoadedRef.current = true;
       }
     } catch (error) {
       console.error('Error loading conversations:', error);
     } finally {
-      if (showLoading) setIsLoading(false);
+      if (showLoading && !conversationsLoadedRef.current) setIsLoading(false);
     }
   };
 
   // IMPORTANT: Load anonymous conversations separately for the Anonymous DM tab
   const loadAnonymousConversations = async (showLoading = true) => {
     try {
-      if (showLoading) setIsLoading(true);
+      if (showLoading && !anonymousConversationsLoadedRef.current) setIsLoading(true);
       const response = await fetch('/api/anonymous-dm');
       if (response.ok) {
         const data = await response.json();
         setAnonymousConversations(data.conversations || []);
+        anonymousConversationsLoadedRef.current = true;
       }
     } catch (error) {
       console.error('Error loading anonymous DMs:', error);
     } finally {
-      if (showLoading) setIsLoading(false);
+      if (showLoading && !anonymousConversationsLoadedRef.current) setIsLoading(false);
     }
   };
 
@@ -386,7 +388,11 @@ export default function PersonalChatPage() {
         <ScrollArea className="flex-1 bg-white">
           {activeTab === 'chats' ? (
             <>
-              {isLoading ? (
+              {isLoading && !conversationsLoadedRef.current ? (
+                <div className="flex items-center justify-center h-48">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#c7b793]"></div>
+                </div>
+              ) : !conversationsLoadedRef.current ? (
                 <div className="flex items-center justify-center h-48">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#c7b793]"></div>
                 </div>
@@ -449,7 +455,11 @@ export default function PersonalChatPage() {
 
                 {/* Anonymous DM List */}
                 <ScrollArea className="flex-1 bg-white">
-                  {isLoading ? (
+                  {isLoading && !anonymousConversationsLoadedRef.current ? (
+                    <div className="flex items-center justify-center h-48">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#c7b793]"></div>
+                    </div>
+                  ) : !anonymousConversationsLoadedRef.current ? (
                     <div className="flex items-center justify-center h-48">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#c7b793]"></div>
                     </div>

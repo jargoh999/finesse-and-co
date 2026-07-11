@@ -144,15 +144,14 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
 
   // Confirm send state when SSE delivers the pending message
   useEffect(() => {
-    if (isSending && pendingMessageIdRef.current) {
-      const timeout = setTimeout(() => {
-        setNewMessage('');
-        stopTyping();
-        setIsSending(false);
-        pendingMessageIdRef.current = null;
-      }, 4000);
-      return () => clearTimeout(timeout);
-    }
+    if (!isSending || !pendingMessageIdRef.current) return;
+    const timeout = setTimeout(() => {
+      setNewMessage('');
+      stopTyping();
+      setIsSending(false);
+      pendingMessageIdRef.current = null;
+    }, 4000);
+    return () => clearTimeout(timeout);
   }, [isSending, messages, stopTyping]);
 
   // Focus edit input when editing
@@ -310,7 +309,24 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
 
       if (response.ok) {
         const data = await response.json();
-        pendingMessageIdRef.current = data.message?._id || null;
+        const sentMessage = data.message;
+        pendingMessageIdRef.current = sentMessage?._id || null;
+
+        if (sentMessage) {
+          setMessages(prev => {
+            const exists = prev.some(m => m._id === sentMessage._id);
+            if (exists) return prev;
+            return [...prev, sentMessage];
+          });
+          if (sentMessage.timestamp) {
+            lastTimestampRef.current = new Date(sentMessage.timestamp).toISOString();
+          }
+        }
+
+        setNewMessage('');
+        stopTyping();
+        setIsSending(false);
+        pendingMessageIdRef.current = null;
       } else {
         setIsSending(false);
         pendingMessageIdRef.current = null;
