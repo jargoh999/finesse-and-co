@@ -44,14 +44,20 @@ export default function AnonymousDMPage() {
     }
     setCurrentUser(user);
     loadConversations();
-    setupPolling();
+  }, [router]);
+
+  // IMPORTANT: Setup polling for real-time updates
+  useEffect(() => {
+    if (currentUser) {
+      setupPolling();
+    }
 
     return () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, [router]);
+  }, [currentUser]);
 
   const setupPolling = () => {
     // Poll for conversation updates every 2 seconds without showing loading state

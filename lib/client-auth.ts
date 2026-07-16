@@ -8,6 +8,7 @@ export function getCurrentUserFromSession() {
     const sessionData = localStorage.getItem('user-session');
     if (sessionData) {
       const session = JSON.parse(sessionData);
+      
       return {
         id: session.userId,
         email: session.email,
@@ -39,12 +40,22 @@ export function setCurrentUserSession(user: any) {
   }
 }
 
+export function resetSessionExpiry() {
+  if (typeof window === 'undefined') return;
+  try {
+    // no-op now that expiry is handled by token/cookie
+  } catch (error) {
+    console.error('Error resetting session expiry:', error);
+  }
+}
+
 export function clearCurrentUserSession() {
   if (typeof window === 'undefined') return;
 
   try {
     localStorage.removeItem('user-session');
+    localStorage.removeItem('session-expiry');
   } catch (error) {
-    console.error('Error clearing user session:', error);
+    console.error('Error clearing current user session:', error);
   }
 }

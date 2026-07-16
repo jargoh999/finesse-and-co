@@ -37,20 +37,19 @@ export async function authenticateUser(email: string, password: string) {
     return null;
   }
 
-  return { id: user._id.toString(), name: user.name, email: user.email };
+  return { id: user._id.toString(), name: user.name, email: user.email, image: user.image };
 }
 
 export function generateToken(user: any) {
-  // Simple base64 encoding for Edge Runtime compatibility
   const payload = {
     userId: user.id,
     email: user.email,
-    exp: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days
+    exp: Math.floor(Date.now() / 1000) + (5 * 60) // 5 minutes expiry
   };
 
   const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const payloadStr = btoa(JSON.stringify(payload));
-  const signature = btoa('simple-signature'); // In production, use proper HMAC
+  const signature = btoa('simple-signature');
 
   return `${header}.${payloadStr}.${signature}`;
 }

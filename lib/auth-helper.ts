@@ -116,6 +116,7 @@ export function clearCurrentUserSession() {
 
   try {
     localStorage.removeItem('user-session');
+    localStorage.removeItem('session-expiry');
   } catch (error) {
     console.error('Error clearing current user session:', error);
   }

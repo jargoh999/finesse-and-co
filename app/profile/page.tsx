@@ -17,7 +17,7 @@ import {
   X,
   Loader2,
 } from 'lucide-react';
-import { getCurrentUserFromSession } from '@/lib/client-auth';
+import { getCurrentUserFromSession, clearCurrentUserSession } from '@/lib/client-auth';
 // import { useBackButtonGuard } from '@/hooks/useBackButtonGuard';
 import { format } from 'date-fns/format';
 

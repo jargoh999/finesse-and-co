@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -16,6 +17,8 @@ import {
   Trash2,
   Edit2,
   Check,
+  CornerDownLeft,
+  Reply,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
@@ -38,6 +41,11 @@ interface Message {
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'error';
   isEdited?: boolean;
   editedAt?: Date;
+  replyTo?: {
+    messageId: string;
+    senderName: string;
+    content: string;
+  };
 }
 
 interface Conversation {
@@ -86,10 +94,14 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   const [isEditing, setIsEditing] = useState(false);
   const [contextMenuMsgId, setContextMenuMsgId] = useState<string | null>(null);
 
+  // IMPORTANT: Reply mode for smooth UX
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   
   // Track timestamp and length to safely prevent recursive rendering loops
   const lastTimestampRef = useRef<string>(new Date(0).toISOString());
@@ -294,6 +306,12 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     if (!cleanMessage || isSending) return;
 
     setIsSending(true);
+
+    // IMPORTANT: Clear reply state after sending
+    const replyToMessage = replyingTo;
+    if (replyingTo) {
+      setReplyingTo(null);
+    }
     try {
       const response = await fetch('/api/personal-messages', {
         method: 'POST',
@@ -303,7 +321,13 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
         body: JSON.stringify({
           conversationId: conversation._id,
           content: cleanMessage,
-          type: 'text'
+          type: 'text',
+          // IMPORTANT: Include reply metadata if replying to a message
+          replyTo: replyToMessage ? {
+            messageId: replyToMessage._id,
+            senderName: replyToMessage.sender.name,
+            content: replyToMessage.content
+          } : undefined
         }),
       });
 
@@ -388,6 +412,33 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     setEditContent('');
   };
 
+  // IMPORTANT: Reply functions for smooth UX
+  const startReply = (message: Message) => {
+    setReplyingTo(message);
+    messageInputRef.current?.focus();
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
+  };
+
+  // IMPORTANT: Double-tap handler for replying to messages
+  const lastTapRef = useRef<number>(0);
+  const handleDoubleTap = (message: Message) => {
+    const now = Date.now();
+    const timeSinceLastTap = now - lastTapRef.current;
+    
+    if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+      // Double tap detected - only allow replying to other users' messages
+      if (message.sender.email !== currentUser?.email) {
+        startReply(message);
+      }
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+    }
+  };
+
   const submitEdit = async () => {
     if (!editContent.trim() || !editingMessageId) return;
     setIsEditing(true);
@@ -433,6 +484,11 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
         onClick={() => {
           if (selectMode && isCurrentUser) toggleSelect(message._id);
         }}
+        onTouchStart={() => handleDoubleTap(message)}
+        onDoubleClick={() => {
+          // Desktop double-click support
+          if (!isCurrentUser) startReply(message);
+        }}
       >
         {/* Select mode checkbox (only own messages) */}
         {selectMode && isCurrentUser && (
@@ -475,6 +531,33 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
               </div>
             ) : (
               <>
+                {/* IMPORTANT: Show reply context if this is a reply */}
+                {message.replyTo && (
+                  <div className={cn(
+                    "mb-2 pb-2 border-b transition-all duration-200 ease-in-out",
+                    isCurrentUser ? "border-white/20" : "border-gray-200"
+                  )}>
+                    <div className="flex items-center space-x-1.5">
+                      <CornerDownLeft className={cn(
+                        "h-3 w-3",
+                        isCurrentUser ? "text-white/70" : "text-gray-400"
+                      )} />
+                      <p className={cn(
+                        "text-xs",
+                        isCurrentUser ? "text-white/70" : "text-gray-500"
+                      )}>
+                        <span className="font-medium">{message.replyTo.senderName}</span>
+                      </p>
+                    </div>
+                    <p className={cn(
+                      "text-xs truncate mt-0.5 ml-4",
+                      isCurrentUser ? "text-white/60" : "text-gray-400"
+                    )}>
+                      {message.replyTo.content}
+                    </p>
+                  </div>
+                )}
+
                 {!isCurrentUser && (
                   <div className="mb-1.5 flex items-baseline justify-between gap-4">
                     <p className="text-xs font-semibold text-[#a38c5b]">
@@ -536,6 +619,17 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
               )}>
                 {message.timestamp ? format(new Date(message.timestamp), 'h:mm a') : ''}
               </span>
+              {!isCurrentUser && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startReply(message);
+                  }}
+                  className="text-gray-400 hover:text-[#c7b793] transition-colors"
+                >
+                  <Reply className="h-3 w-3" />
+                </button>
+              )}
             </div>
 
             <div className={cn(
@@ -563,29 +657,57 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
             </button>
           )}
 
+          {!isCurrentUser && !selectMode && message.type === 'text' && editingMessageId !== message._id && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                startReply(message);
+              }}
+              className="absolute -top-1 -left-7 opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-gray-100 rounded-full h-6 w-6 flex items-center justify-center shadow-sm text-gray-400 hover:text-[#c7b793]"
+            >
+              <Reply className="h-3.5 w-3.5" />
+            </button>
+          )}
+
           {showContextMenu && (
             <div
               className="absolute right-0 bottom-full mb-1 bg-white border border-gray-100 rounded-xl shadow-lg z-20 overflow-hidden min-w-[120px]"
               onClick={(e) => e.stopPropagation()}
             >
-              <button
-                onClick={() => startEdit(message)}
-                className="w-full flex items-center space-x-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#faf8f5] transition-colors"
-              >
-                <Edit2 className="h-3.5 w-3.5 text-[#c7b793]" />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={() => {
-                  setSelectMode(true);
-                  toggleSelect(message._id);
-                  setContextMenuMsgId(null);
-                }}
-                className="w-full flex items-center space-x-2 px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span>Delete</span>
-              </button>
+              {!isCurrentUser && (
+                <button
+                  onClick={() => {
+                    startReply(message);
+                    setContextMenuMsgId(null);
+                  }}
+                  className="w-full flex items-center space-x-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#faf8f5] transition-colors"
+                >
+                  <Reply className="h-3.5 w-3.5 text-[#c7b793]" />
+                  <span>Reply</span>
+                </button>
+              )}
+              {isCurrentUser && (
+                <button
+                  onClick={() => startEdit(message)}
+                  className="w-full flex items-center space-x-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#faf8f5] transition-colors"
+                >
+                  <Edit2 className="h-3.5 w-3.5 text-[#c7b793]" />
+                  <span>Edit</span>
+                </button>
+              )}
+              {isCurrentUser && (
+                <button
+                  onClick={() => {
+                    setSelectMode(true);
+                    toggleSelect(message._id);
+                    setContextMenuMsgId(null);
+                  }}
+                  className="w-full flex items-center space-x-2 px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Delete</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -705,9 +827,32 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
       {!selectMode && (
         <div className="bg-white border-t border-[#c7b793]/15 p-3 sm:p-4 shadow-lg flex-shrink-0">
           <div className="max-w-4xl mx-auto">
+            {/* IMPORTANT: Reply indicator */}
+            {replyingTo && (
+              <div className="mb-2 flex items-center justify-between bg-[#faf8f5] rounded-lg px-3 py-2 border border-[#c7b793]/20 transition-all duration-200 ease-in-out">
+                <div className="flex items-center space-x-2 flex-1 min-w-0">
+                  <Reply className="h-3.5 w-3.5 text-[#c7b793] flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-gray-700 truncate">
+                      Replying to {replyingTo.sender.name}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {replyingTo.content}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={cancelReply}
+                  className="ml-2 text-gray-400 hover:text-gray-600 flex-shrink-0"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
             <form onSubmit={sendMessage} className="relative">
               <div className="relative">
-                <Input
+                <Textarea
+                  ref={messageInputRef}
                   value={newMessage}
                   onChange={(e) => {
                     setNewMessage(e.target.value);
@@ -718,13 +863,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                     }
                   }}
                   placeholder={`Message ${conversation.participant?.name || conversation.participant?.email}...`}
-                  className="pl-4 pr-12 sm:pl-5 sm:pr-14 py-3.5 rounded-full border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#c7b793] focus:ring-2 focus:ring-[#c7b793]/10 transition-all duration-200 text-sm min-h-[44px] text-black"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage(e);
-                    }
-                  }}
+                  className="pl-4 pr-12 sm:pl-5 sm:pr-14 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#c7b793] focus:ring-2 focus:ring-[#c7b793]/10 transition-all duration-200 text-sm min-h-[44px] text-black resize-none"
                 />
                 <Button
                   type="submit"
@@ -747,6 +886,27 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
 
               <div className="flex items-center justify-between mt-3 px-1">
                 <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const textarea = messageInputRef.current;
+                      if (textarea) {
+                        const start = textarea.selectionStart;
+                        const end = textarea.selectionEnd;
+                        const newText = newMessage.substring(0, start) + '\n' + newMessage.substring(end);
+                        setNewMessage(newText);
+                        setTimeout(() => {
+                          textarea.selectionStart = textarea.selectionEnd = start + 1;
+                        }, 0);
+                      } else {
+                        setNewMessage(prev => prev + '\n');
+                      }
+                    }}
+                    className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+                    title="New line"
+                  >
+                    <CornerDownLeft className="w-5 h-5" />
+                  </button>
                   <div className="relative">
                     <button
                       type="button"

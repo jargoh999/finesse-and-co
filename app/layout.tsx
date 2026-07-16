@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AutoSaveUserData } from '@/components/AutoSaveUserData';
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration';
 import { SecurityFeatures } from '@/components/SecurityFeatures';
+import { UnauthorizedRedirect } from '@/components/UnauthorizedRedirect';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -47,6 +48,7 @@ export default function RootLayout({
                         {/* <AssistantButton /> */}
                         <AutoSaveUserData />
                         <ServiceWorkerRegistration />
+                        <UnauthorizedRedirect />
                     </Providers>
                 </ThemeProvider>
             </body>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { setCurrentUserSession } from '@/lib/auth-helper';
+import { setCurrentUserSession } from '@/lib/client-auth';
 import { Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 

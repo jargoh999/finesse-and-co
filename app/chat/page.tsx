@@ -34,6 +34,21 @@ export default function ChatPage() {
 
   // Check authentication on component mount
   useEffect(() => {
+    const detectReload = () => {
+      try {
+        const navEntry = performance.getEntriesByType('navigation')[0] as any;
+        const isReload = navEntry?.type === 'reload' || 
+                         (performance.navigation && performance.navigation.type === 1);
+        if (isReload) {
+          clearCurrentUserSession();
+        }
+      } catch (e) {
+        // Fallback: if Performance API unavailable, don't clear on navigation
+      }
+    };
+
+    detectReload();
+
     const user = getClientUser();
     if (!user) {
       router.push('/login');

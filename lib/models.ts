@@ -374,6 +374,12 @@ if (typeof window !== 'undefined') {
     editedAt: {
       type: Date,
     },
+    // IMPORTANT: Reply support for smooth UX
+    replyTo: {
+      messageId: String,
+      senderName: String,
+      content: String,
+    },
   }, {
     timestamps: true,
   });

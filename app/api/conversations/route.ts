@@ -149,71 +149,58 @@ export async function GET(request: NextRequest) {
     // Debug: Log the conversations structure
     console.log('User conversations:', JSON.stringify(userWithConversations.conversations, null, 2));
 
-    // Get conversations with their latest messages
-    const conversationsWithMessages = await Promise.all(
-      userWithConversations.conversations.map(async (conv: any) => {
-        // Skip if conversationId is null or not populated
-        if (!conv.conversationId || !conv.conversationId._id) {
-          console.warn('Invalid conversation found:', {
-            conversationId: conv.conversationId,
-            participant: conv.participant,
-            lastMessageAt: conv.lastMessageAt
-          });
+    // Get conversations with their latest messages in one aggregation
+    const validConvs = userWithConversations.conversations.filter((conv: any) => conv.conversationId?._id);
+    const conversationIds = validConvs.map((conv: any) => conv.conversationId._id);
 
-          // Clean up invalid conversation reference
-          try {
-            await PrivateUser.findByIdAndUpdate(user.id, {
-              $pull: {
-                conversations: { conversationId: conv.conversationId }
-              }
-            });
-            console.log('Removed invalid conversation reference');
-          } catch (cleanupError) {
-            console.error('Error cleaning up invalid conversation:', cleanupError);
-          }
+    const latestMessages = conversationIds.length > 0 ? await Message.aggregate([
+      { $match: { conversation: { $in: conversationIds } } },
+      { $sort: { createdAt: -1 } },
+      { $group: {
+        _id: '$conversation',
+        latestMessage: { $first: '$$ROOT' }
+      }},
+      { $lookup: {
+        from: 'privateusers',
+        localField: 'latestMessage.sender',
+        foreignField: '_id',
+        as: 'sender'
+      }},
+      { $unwind: '$sender' },
+      { $project: {
+        _id: '$latestMessage._id',
+        content: '$latestMessage.content',
+        sender: {
+          _id: '$sender._id',
+          name: '$sender.name',
+          email: '$sender.email',
+          image: '$sender.image'
+        },
+        timestamp: '$latestMessage.createdAt',
+        type: '$latestMessage.type',
+        isEdited: '$latestMessage.isEdited',
+        editedAt: '$latestMessage.editedAt',
+        systemData: '$latestMessage.systemData',
+        conversationId: '$_id'
+      }}
+    ]) : [];
 
-          return {
-            _id: null, // or handle this case appropriately
-            participants: [],
-            participant: conv.participant,
-            lastMessage: null,
-            lastMessageAt: conv.lastMessageAt,
-            unreadCount: conv.unreadCount,
-            createdAt: null,
-            error: 'Invalid conversation'
-          };
-        }
-
-        const messages = await Message.find({ conversation: conv.conversationId._id })
-          .sort({ createdAt: -1 })
-          .limit(1)
-          .populate('sender', 'name email image')
-          .lean();
-
-        return {
-          _id: conv.conversationId._id,
-          participants: conv.conversationId.participants,
-          participant: conv.participant,
-          lastMessage: messages[0] || null,
-          lastMessageAt: conv.lastMessageAt,
-          unreadCount: conv.unreadCount,
-          createdAt: conv.conversationId.createdAt
-        };
-      })
-    );
-
-    // Filter out invalid conversations and log warnings
-    const validConversations = conversationsWithMessages.filter(conv => {
-      if (!conv._id) {
-        console.warn('Skipping invalid conversation:', conv);
-        return false;
-      }
-      return true;
+    const conversationsWithMessages = validConvs.map((conv: any) => {
+      const latest = latestMessages.find((m: any) => m.conversationId.toString() === conv.conversationId._id.toString());
+      return {
+        _id: conv.conversationId._id,
+        participants: conv.conversationId.participants,
+        participant: conv.participant,
+        lastMessage: latest || null,
+        lastMessageAt: conv.lastMessageAt,
+        unreadCount: conv.unreadCount,
+        createdAt: conv.conversationId.createdAt
+      };
     });
 
     return NextResponse.json({
       success: true,
-      conversations: validConversations
+      conversations: conversationsWithMessages
     });
 
   } catch (error) {

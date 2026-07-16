@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Search, MessageCircle, LogOut, MessageCircleQuestion, MessageSquareLock, UserPlus, UserCircle } from 'lucide-react';
-import { getCurrentUserFromSession, clearCurrentUserSession } from '@/lib/client-auth';
+import { getCurrentUserFromSession, clearCurrentUserSession, resetSessionExpiry } from '@/lib/client-auth';
 import { NewConversationDialog } from '../../components/NewConversationDialog';
 import { ConversationList } from '../../components/ConversationList';
 import { PersonalChat } from '../../components/PersonalChat';
@@ -16,6 +16,7 @@ import { AnonymousDMList } from '../../components/AnonymousDMList';
 import { AnonymousDMConversation } from '../../components/AnonymousDMConversation';
 import { NewAnonymousDMDialog } from '../../components/NewAnonymousDMDialog';
 import { ThemeSwitcher } from '../../components/ThemeSwitcher';
+import { Switch } from '@/components/ui/switch';
 import { useTheme } from '../../contexts/ThemeContext';
 // import { useBackButtonGuard } from '@/hooks/useBackButtonGuard';
 import { cn } from '@/lib/utils';
@@ -67,18 +68,52 @@ export default function PersonalChatPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'chats' | 'anonymous'>('chats');
   const [showNewDMDialog, setShowNewDMDialog] = useState(false);
+  const [anonymousEnabled, setAnonymousEnabled] = useState(true);
+  const conversationsEventSourceRef = useRef<EventSource | null>(null);
   const conversationsLoadedRef = useRef(false);
   const anonymousConversationsLoadedRef = useRef(false);
 
-  // Check authentication
+  // IMPORTANT: Check authentication only (no reload redirect)
   useEffect(() => {
     const user = getCurrentUserFromSession();
+    console.log('Personal chat - user from session:', user);
     if (!user) {
+      console.log('Personal chat - no user found, redirecting to login');
       router.push('/login');
       return;
     }
     setCurrentUser(user);
   }, [router]);
+
+  // Reset session expiry on user activity so active users aren't logged out
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const resetExpiry = () => {
+      resetSessionExpiry();
+    };
+
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+    events.forEach(event => {
+      window.addEventListener(event, resetExpiry, { passive: true });
+    });
+
+    return () => {
+      events.forEach(event => {
+        window.removeEventListener(event, resetExpiry);
+      });
+    };
+  }, [currentUser]);
+
+  // Warn before leaving the app via back button or close
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
 
   // Load conversations once on mount (no constant polling)
   useEffect(() => {
@@ -87,6 +122,34 @@ export default function PersonalChatPage() {
       loadAnonymousConversations();
     }
   }, [currentUser]);
+
+  // Load anonymous enabled state from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('anonymous-enabled');
+      if (stored !== null) {
+        setAnonymousEnabled(stored === 'true');
+      }
+    } catch (error) {
+      console.error('Error loading anonymous setting:', error);
+    }
+  }, []);
+
+  // Save anonymous enabled state to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('anonymous-enabled', String(anonymousEnabled));
+    } catch (error) {
+      console.error('Error saving anonymous setting:', error);
+    }
+  }, [anonymousEnabled]);
+
+  // Switch back to chats tab if anonymous is disabled while on that tab
+  useEffect(() => {
+    if (!anonymousEnabled && activeTab === 'anonymous') {
+      setActiveTab('chats');
+    }
+  }, [anonymousEnabled, activeTab]);
 
   // Real-time conversation list updates via SSE
   useEffect(() => {
@@ -335,21 +398,22 @@ export default function PersonalChatPage() {
               <Button
                 size="sm"
                 variant={activeTab === 'anonymous' ? 'default' : 'outline'}
-                onClick={() => setActiveTab('anonymous')}
+                onClick={() => anonymousEnabled && setActiveTab('anonymous')}
+                disabled={!anonymousEnabled}
                 className={cn(
                   "flex-1 rounded-full text-sm font-medium",
                   activeTab === 'anonymous' ? 'text-white' : 'text-gray-600'
                 )}
-                style={activeTab === 'anonymous' ? { backgroundColor: colors.primary } : { borderColor: colors.primaryLight, backgroundColor: 'transparent' }}
+                style={activeTab === 'anonymous' && anonymousEnabled ? { backgroundColor: colors.primary } : { borderColor: colors.primaryLight, backgroundColor: 'transparent' }}
                 onMouseEnter={(e) => {
-                  if (activeTab === 'anonymous') {
+                  if (activeTab === 'anonymous' && anonymousEnabled) {
                     e.currentTarget.style.backgroundColor = colors.primaryHover;
-                  } else {
+                  } else if (anonymousEnabled) {
                     e.currentTarget.style.backgroundColor = colors.primaryLight;
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (activeTab === 'anonymous') {
+                  if (activeTab === 'anonymous' && anonymousEnabled) {
                     e.currentTarget.style.backgroundColor = colors.primary;
                   } else {
                     e.currentTarget.style.backgroundColor = 'transparent';
@@ -358,6 +422,17 @@ export default function PersonalChatPage() {
               >
                 Anonymous DM
               </Button>
+
+              <div className="flex items-center space-x-1 sm:space-x-2 ml-1 sm:ml-2">
+                <span className="text-[10px] text-gray-500 sm:text-xs">Anonymous</span>
+                <div className="scale-75 sm:scale-100 origin-left">
+                  <Switch
+                    checked={anonymousEnabled}
+                    onCheckedChange={setAnonymousEnabled}
+                    className="h-5 w-9"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
@@ -386,7 +461,7 @@ export default function PersonalChatPage() {
 
         {/* Conversations List */}
         <ScrollArea className="flex-1 bg-white">
-          {activeTab === 'chats' ? (
+          {(activeTab === 'chats' || !anonymousEnabled) ? (
             <>
               {isLoading && !conversationsLoadedRef.current ? (
                 <div className="flex items-center justify-center h-48">

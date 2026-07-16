@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Contact } from '@/lib/types';
-import { getCurrentUserFromSession } from '@/lib/auth-helper';
+import { getCurrentUserFromSession, clearCurrentUserSession } from '@/lib/client-auth';
 import {
   Users,
   Plus,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 
 export default function ContactsPage() {
+  const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,8 +33,12 @@ export default function ContactsPage() {
 
   useEffect(() => {
     const user = getCurrentUserFromSession();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
     setCurrentUser(user);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (currentUser) {
