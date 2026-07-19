@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -55,7 +55,16 @@ interface AnonymousConversation {
 }
 
 export default function PersonalChatPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen bg-[#faf8f5]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#c7b793]"></div></div>}>
+      <PersonalChatPageContent />
+    </Suspense>
+  );
+}
+
+function PersonalChatPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { colors } = useTheme();
   // Prevent phone back button from leaving the app tab
   // useBackButtonGuard('/personal-chat');
@@ -83,7 +92,10 @@ export default function PersonalChatPage() {
       return;
     }
     setCurrentUser(user);
-  }, [router]);
+
+    // IMPORTANT: Replace history to remove landing-page from history stack
+    window.history.replaceState({ tab: activeTab, isPersonalChat: true }, '', window.location.href);
+  }, [router, activeTab]);
 
   // Reset session expiry on user activity so active users aren't logged out
   useEffect(() => {
@@ -143,6 +155,75 @@ export default function PersonalChatPage() {
       console.error('Error saving anonymous setting:', error);
     }
   }, [anonymousEnabled]);
+
+  // IMPORTANT: Read conversation ID from URL and select it
+  useEffect(() => {
+    const conversationId = searchParams.get('conversation');
+    const anonymousId = searchParams.get('anonymous');
+
+    if (conversationId && conversations.length > 0) {
+      const conversation = conversations.find(c => c._id === conversationId);
+      if (conversation) {
+        setSelectedConversation(conversation);
+      }
+    }
+
+    if (anonymousId && anonymousConversations.length > 0) {
+      const conversation = anonymousConversations.find(c => c.senderId === anonymousId);
+      if (conversation) {
+        setSelectedAnonymousConversation(conversation);
+      }
+    }
+  }, [searchParams, conversations, anonymousConversations]);
+
+  // IMPORTANT: Update URL when conversation is selected
+  useEffect(() => {
+    if (selectedConversation) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('conversation', selectedConversation._id);
+      url.searchParams.set('tab', 'chats');
+      url.searchParams.delete('anonymous');
+      window.history.pushState({ tab: 'chats' }, '', url);
+    } else if (selectedAnonymousConversation) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('anonymous', selectedAnonymousConversation.senderId);
+      url.searchParams.set('tab', 'anonymous');
+      url.searchParams.delete('conversation');
+      window.history.pushState({ tab: 'anonymous' }, '', url);
+    } else {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('conversation');
+      url.searchParams.delete('anonymous');
+      url.searchParams.delete('tab');
+      window.history.replaceState({ tab: activeTab, isPersonalChat: true }, '', url);
+    }
+  }, [selectedConversation, selectedAnonymousConversation, activeTab]);
+
+  // IMPORTANT: Handle back button to prevent going to landing-page
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // If going back from a conversation, deselect it
+      if (selectedConversation || selectedAnonymousConversation) {
+        if (event.state && event.state.tab) {
+          setActiveTab(event.state.tab);
+          setSelectedConversation(null);
+          setSelectedAnonymousConversation(null);
+        }
+        return;
+      }
+
+      // If trying to go back from personal-chat (no conversation selected), push back to personal-chat
+      if (!selectedConversation && !selectedAnonymousConversation) {
+        // Small delay to allow the browser to process the back event
+        setTimeout(() => {
+          window.history.pushState({ tab: activeTab, isPersonalChat: true }, '', window.location.href);
+        }, 0);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeTab, selectedConversation, selectedAnonymousConversation]);
 
   // Switch back to chats tab if anonymous is disabled while on that tab
   useEffect(() => {
@@ -489,6 +570,7 @@ export default function PersonalChatPage() {
                     setSelectedConversation(conversation);
                   }}
                   currentUser={currentUser}
+                  privateMode={false}
                 />
               )}
             </>

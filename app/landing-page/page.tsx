@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MessageCircle, Lock, Wifi, FileText } from 'lucide-react';
+import { MessageCircle, Lock, RefreshCw, FileText } from 'lucide-react';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -30,11 +30,11 @@ export default function LandingPage() {
       color: '#10b981', // Emerald
     },
     {
-      id: 'wifi',
-      name: 'WiFi Shield',
-      description: 'Scan wireless channels, analyze security levels, and log trusted access parameters.',
-      icon: Wifi,
-      path: '/wifi',
+      id: 'update',
+      name: 'Updates',
+      description: 'View business ads, commercial spaces, and daily requests from the community.',
+      icon: RefreshCw,
+      path: '/update',
       style: { left: '50%', top: '100%', marginLeft: '-28px', marginTop: '-28px' },
       svgTarget: { x: 200, y: 350 },
       color: '#f59e0b', // Amber

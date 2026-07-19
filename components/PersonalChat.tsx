@@ -19,6 +19,8 @@ import {
   Check,
   CornerDownLeft,
   Reply,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
@@ -96,6 +98,9 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
 
   // IMPORTANT: Reply mode for smooth UX
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
+  // IMPORTANT: Private mode for screenshot prevention
+  const [privateMode, setPrivateMode] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -671,7 +676,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
 
           {showContextMenu && (
             <div
-              className="absolute right-0 bottom-full mb-1 bg-white border border-gray-100 rounded-xl shadow-lg z-20 overflow-hidden min-w-[120px]"
+              className="absolute right-0 top-full mt-1 md:left-full md:top-0 md:ml-1 md:right-auto bg-white border border-gray-100 rounded-xl shadow-lg z-[100] overflow-hidden min-w-[120px]"
               onClick={(e) => e.stopPropagation()}
             >
               {!isCurrentUser && (
@@ -716,9 +721,19 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#faf8f5] overflow-hidden">
+    <div 
+      className={cn(
+        "flex flex-col h-screen bg-[#faf8f5] overflow-hidden",
+        privateMode && "select-none"
+      )}
+      style={{ 
+        fontFamily: "'Outfit', sans-serif",
+        WebkitUserSelect: privateMode ? 'none' : 'auto',
+        userSelect: privateMode ? 'none' : 'auto'
+      }}
+    >
       {/* Header */}
-      <div className="bg-white border-b border-[#c7b793]/15 px-4 py-3 flex items-center justify-between min-h-[64px] flex-shrink-0">
+      <div className="bg-white border-b border-[#c7b793]/15 px-4 py-3 flex items-center justify-between min-h-[64px] flex-shrink-0 relative z-10">
         <div className="flex items-center space-x-3 flex-1 min-w-0">
           <Button
             variant="ghost"
@@ -780,21 +795,53 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
               </Button>
             </>
           ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSelectMode}
-              className="text-gray-500 hover:text-gray-700 p-2 min-h-[44px] min-w-[44px]"
-              title="Select messages"
-            >
-              <CheckSquare className="h-5 w-5" />
-            </Button>
+            <div className="flex items-center space-x-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleSelectMode}
+                className="text-gray-500 hover:text-gray-700 p-2 min-h-[44px] min-w-[44px]"
+                title="Select messages"
+              >
+                <CheckSquare className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setPrivateMode(!privateMode)}
+                className={cn(
+                  "text-gray-500 p-2 min-h-[44px] min-w-[44px]",
+                  privateMode ? "text-[#c7b793]" : "hover:text-gray-700"
+                )}
+                title={privateMode ? "Disable private mode" : "Enable private mode"}
+              >
+                {privateMode ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}
+              </Button>
+            </div>
           )}
         </div>
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto bg-[#faf8f5] scroll-smooth">
+      <div className="flex-1 overflow-y-auto bg-[#faf8f5] scroll-smooth relative">
+        {/* IMPORTANT: Private mode overlay to prevent screenshots */}
+        {privateMode && (
+          <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center" style={{ 
+            WebkitUserSelect: 'none',
+            userSelect: 'none',
+            WebkitTouchCallout: 'none'
+          }}>
+            <div className="bg-black/10 backdrop-blur-[1px] w-full h-full flex items-center justify-center">
+              <div className="bg-white/95 px-6 py-4 rounded-2xl shadow-lg border border-[#c7b793]/20">
+                <div className="flex items-center space-x-3">
+                  <Lock className="h-5 w-5 text-[#c7b793]" />
+                  <p className="text-sm font-medium text-gray-700">Private Mode Active</p>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Screenshots disabled</p>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="max-w-4xl mx-auto space-y-4 p-3 sm:p-4 pb-24 sm:pb-20">
           {isLoading ? (
             <div className="flex items-center justify-center min-h-[400px]">

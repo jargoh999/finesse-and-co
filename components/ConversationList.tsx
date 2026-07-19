@@ -31,18 +31,19 @@ interface Conversation {
 }
 
 interface ConversationListProps {
-
   conversations: Conversation[];
   selectedConversation: Conversation | null;
   onSelectConversation: (conversation: Conversation) => void;
   currentUser: any;
+  privateMode?: boolean;
 }
 
 export function ConversationList({
   conversations,
   selectedConversation,
   onSelectConversation,
-  currentUser
+  currentUser,
+  privateMode = false
 }: ConversationListProps) {
   const truncateMessage = (message: string, maxLength: number = 35) => {
     if (message.length <= maxLength) return message;
@@ -76,30 +77,45 @@ export function ConversationList({
                 <h3 className="text-sm font-semibold text-gray-900 truncate">
                   {conversation.participant?.name || conversation.participant?.email}
                 </h3>
-                {conversation.lastMessageAt && (
-                  <span className="text-xs text-gray-400">
-                    {formatDistanceToNow(new Date(conversation.lastMessageAt), { addSuffix: false })}
-                  </span>
+                {conversation.unreadCount > 0 && (
+                  <Badge className="bg-[#c7b793] text-white text-xs h-5 px-2 rounded-full">
+                    {conversation.unreadCount}
+                  </Badge>
                 )}
               </div>
 
-              {conversation.lastMessage ? (
-                <p className="text-sm text-gray-500 truncate">
-                  {conversation.lastMessage.type === 'system' ? (
-                    <span className="text-[#a38c5b] font-medium">
-                      Q&A: {conversation.lastMessage.systemData?.question || 'New question'}
-                    </span>
+              {/* IMPORTANT: Show last message only when NOT in private mode */}
+              {!privateMode && (
+                <div className="flex items-center justify-between">
+                  {conversation.lastMessage ? (
+                    <p className="text-sm text-gray-500 truncate">
+                      {conversation.lastMessage.type === 'system' ? (
+                        <span className="text-[#a38c5b] font-medium">
+                          Q&A: {conversation.lastMessage.systemData?.question || 'New question'}
+                        </span>
+                      ) : (
+                        <>
+                          {conversation.lastMessage.sender.email === currentUser?.email ? 'You: ' : ''}
+                          {truncateMessage(conversation.lastMessage.content)}
+                        </>
+                      )}
+                    </p>
                   ) : (
-                    <>
-                      {conversation.lastMessage.sender.email === currentUser?.email ? 'You: ' : ''}
-                      {truncateMessage(conversation.lastMessage.content)}
-                    </>
+                    <p className="text-sm text-gray-400 italic">
+                      No messages yet
+                    </p>
                   )}
-                </p>
-              ) : (
-                <p className="text-sm text-gray-400 italic">
-                  No messages yet
-                </p>
+                  {conversation.lastMessageAt && (
+                    <span className="text-xs text-gray-400 ml-2">
+                      {formatDistanceToNow(new Date(conversation.lastMessageAt), { addSuffix: false })}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* IMPORTANT: In private mode, only show unread count badge (no message, no timestamp, no text) */}
+              {privateMode && (
+                <div className="h-4"></div>
               )}
             </div>
           </div>
