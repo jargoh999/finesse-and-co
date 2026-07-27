@@ -21,7 +21,7 @@ export default function AnonymousAnswerPage({ params }: { params: Promise<{ publ
     const loadParams = async () => {
       const resolvedParams = await params;
       setPublicId(resolvedParams.publicId);
-      
+
       // IMPORTANT: Fetch the actual question from the API using publicId
       try {
         const response = await fetch(`/api/anonymous-questions?publicId=${resolvedParams.publicId}`);
@@ -42,9 +42,23 @@ export default function AnonymousAnswerPage({ params }: { params: Promise<{ publ
         setIsLoading(false);
       }
     };
-    
+
     loadParams();
+
+    // IMPORTANT: Push history state for back button navigation
+    window.history.pushState({ fromAnonymousAnswer: true }, '', window.location.href);
   }, [params]);
+
+  // IMPORTANT: Handle back button to return to personal-chat with anonymous tab
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // Navigate to personal-chat with anonymous tab
+      router.push('/personal-chat?tab=anonymous');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [router]);
 
   const submitAnswer = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -160,6 +160,12 @@ function PersonalChatPageContent() {
   useEffect(() => {
     const conversationId = searchParams.get('conversation');
     const anonymousId = searchParams.get('anonymous');
+    const tab = searchParams.get('tab');
+
+    // Set active tab from URL parameter
+    if (tab === 'chats' || tab === 'anonymous') {
+      setActiveTab(tab);
+    }
 
     if (conversationId && conversations.length > 0) {
       const conversation = conversations.find(c => c._id === conversationId);

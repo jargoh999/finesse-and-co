@@ -21,6 +21,7 @@ import {
   Reply,
   Lock,
   Unlock,
+  Ban,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
@@ -102,6 +103,9 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   // IMPORTANT: Private mode for screenshot prevention
   const [privateMode, setPrivateMode] = useState(false);
 
+  // IMPORTANT: Block user functionality
+  const [isBlocked, setIsBlocked] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -138,6 +142,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   useEffect(() => {
     loadMessages();
     setupRealTimeConnection();
+    checkBlockStatus();
 
     return () => {
       cleanupRealTimeConnection();
@@ -283,6 +288,112 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
       pollingIntervalRef.current = null;
     }
     setIsConnected(false);
+  };
+
+  const checkBlockStatus = async () => {
+    try {
+      const response = await fetch(`/api/block-status?userId=${conversation.participant?._id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setIsBlocked(data.isBlocked || false);
+      }
+    } catch (error) {
+      console.error('Error checking block status:', error);
+    }
+  };
+
+  const toggleBlock = async () => {
+    try {
+      const response = await fetch('/api/block-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blockedUserId: conversation.participant?._id,
+          block: !isBlocked
+        })
+      });
+
+      if (response.ok) {
+        setIsBlocked(!isBlocked);
+      }
+    } catch (error) {
+      console.error('Error toggling block:', error);
+    }
+  };
+
+  const renderMessageContent = (content: string) => {
+    // First, parse markdown-style links [text](url) and render as clickable links
+    const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = linkRegex.exec(content)) !== null) {
+      // Add text before the link
+      if (match.index > lastIndex) {
+        parts.push(content.substring(lastIndex, match.index));
+      }
+
+      // Add the link
+      parts.push(
+        <a
+          key={match.index}
+          href={match[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-white/50 hover:text-white/50 underline"
+        >
+          {match[1]}
+        </a>
+      );
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < content.length) {
+      parts.push(content.substring(lastIndex));
+    }
+
+    // If no markdown links found, check for plain URLs
+    if (parts.length === 1 && typeof parts[0] === 'string') {
+      const plainText = parts[0];
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const urlParts = [];
+      let urlLastIndex = 0;
+      let urlMatch;
+
+      while ((urlMatch = urlRegex.exec(plainText)) !== null) {
+        // Add text before the URL
+        if (urlMatch.index > urlLastIndex) {
+          urlParts.push(plainText.substring(urlLastIndex, urlMatch.index));
+        }
+
+        // Add the URL as a clickable link
+        urlParts.push(
+          <a
+            key={urlMatch.index}
+            href={urlMatch[1]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-500 hover:text-blue-600 underline"
+          >
+            {urlMatch[1]}
+          </a>
+        );
+
+        urlLastIndex = urlMatch.index + urlMatch[0].length;
+      }
+
+      // Add remaining text
+      if (urlLastIndex < plainText.length) {
+        urlParts.push(plainText.substring(urlLastIndex));
+      }
+
+      return urlParts.length > 0 ? urlParts : plainText;
+    }
+
+    return parts.length > 0 ? parts : content;
   };
 
   const loadMessages = async () => {
@@ -606,7 +717,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                     'text-[13.5px] leading-relaxed break-words font-normal',
                     isCurrentUser ? 'text-white' : 'text-gray-800'
                   )}>
-                    {message.content}
+                    {renderMessageContent(message.content)}
                   </p>
                 )}
               </>
@@ -808,6 +919,18 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
               <Button
                 variant="ghost"
                 size="icon"
+                onClick={toggleBlock}
+                className={cn(
+                  "text-gray-500 p-2 min-h-[44px] min-w-[44px]",
+                  isBlocked ? "text-red-500" : "hover:text-gray-700"
+                )}
+                title={isBlocked ? "Unblock user" : "Block user"}
+              >
+                <Ban className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => setPrivateMode(!privateMode)}
                 className={cn(
                   "text-gray-500 p-2 min-h-[44px] min-w-[44px]",
@@ -907,6 +1030,34 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                       onType();
                     } else {
                       stopTyping();
+                    }
+                  }}
+                  onPaste={(e) => {
+                    const pastedText = e.clipboardData.getData('text');
+                    const urlRegex = /(https?:\/\/[^\s]+)/g;
+                    const urls = pastedText.match(urlRegex);
+
+                    if (urls && urls.length > 0) {
+                      e.preventDefault();
+                      const textarea = messageInputRef.current;
+                      if (textarea) {
+                        const start = textarea.selectionStart;
+                        const end = textarea.selectionEnd;
+                        const before = newMessage.substring(0, start);
+                        const after = newMessage.substring(end);
+
+                        let processedText = pastedText;
+                        urls.forEach(url => {
+                          processedText = processedText.replace(url, `[${url}](${url})`);
+                        });
+
+                        const newText = before + processedText + after;
+                        setNewMessage(newText);
+
+                        setTimeout(() => {
+                          textarea.selectionStart = textarea.selectionEnd = start + processedText.length;
+                        }, 0);
+                      }
                     }
                   }}
                   placeholder={`Message ${conversation.participant?.name || conversation.participant?.email}...`}
