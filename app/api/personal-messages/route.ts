@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const { conversationId, content, type = 'text', replyTo } = await request.json();
+    const { conversationId, content, type = 'text', replyTo, metadata } = await request.json();
     if (!conversationId || !content) {
       return NextResponse.json({ error: 'Conversation ID and content are required' }, { status: 400 });
     }
@@ -146,8 +146,9 @@ export async function POST(request: NextRequest) {
       type,
       status: 'sent',
       createdAt: exactNow, // Force write exact timestamp
-      // IMPORTANT: Include replyTo metadata if provided
-      replyTo: replyTo || undefined
+      // IMPORTANT: Include replyTo and metadata if provided
+      replyTo: replyTo || undefined,
+      metadata: metadata || undefined,
     };
 
     const message = new Message(messageData);
@@ -175,7 +176,8 @@ export async function POST(request: NextRequest) {
       },
       timestamp: exactNow, // Match perfectly
       type: message.type,
-      replyTo: message.replyTo || undefined
+      replyTo: message.replyTo || undefined,
+      metadata: message.metadata || undefined,
     };
 
     chatEmitter.emit(`message:${conversationId}`, {
@@ -385,7 +387,8 @@ export async function GET(request: NextRequest) {
       isEdited: msg.isEdited || false,
       editedAt: msg.editedAt,
       systemData: msg.systemData,
-      replyTo: msg.replyTo || undefined
+      replyTo: msg.replyTo || undefined,
+      metadata: msg.metadata || undefined,
     }));
 
     return NextResponse.json({

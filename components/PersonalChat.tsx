@@ -22,6 +22,11 @@ import {
   Lock,
   Unlock,
   Ban,
+  Paperclip,
+  Image as ImageIcon,
+  FileText,
+  Film,
+  Music,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
@@ -37,6 +42,7 @@ interface Message {
     name: string;
     email: string;
     image?: string;
+    
   };
   timestamp: Date;
   type: string;
@@ -48,6 +54,12 @@ interface Message {
     messageId: string;
     senderName: string;
     content: string;
+  };
+  metadata?: {
+    mediaUrl?: string;
+    mediaType?: string;
+    fileName?: string;
+    fileSize?: number;
   };
 }
 
@@ -100,17 +112,22 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
   // IMPORTANT: Reply mode for smooth UX
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
-  // IMPORTANT: Private mode for screenshot prevention
+  // IMPORTANT: Private mode & dynamic disappearance timer
   const [privateMode, setPrivateMode] = useState(false);
+  const [visibleMessages, setVisibleMessages] = useState<Message[]>([]);
+  const [currentTime, setCurrentTime] = useState<number>(Date.now());
+  const [isUploadingMedia, setIsUploadingMedia] = useState<boolean>(false);
 
   // IMPORTANT: Block user functionality
   const [isBlocked, setIsBlocked] = useState(false);
+  const [isBlockedBy, setIsBlockedBy] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Track timestamp and length to safely prevent recursive rendering loops
   const lastTimestampRef = useRef<string>(new Date(0).toISOString());
@@ -143,6 +160,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     loadMessages();
     setupRealTimeConnection();
     checkBlockStatus();
+    checkIsBlockedBy();
 
     return () => {
       cleanupRealTimeConnection();
@@ -190,6 +208,20 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     window.addEventListener('click', handler);
     return () => window.removeEventListener('click', handler);
   }, [contextMenuMsgId]);
+
+  // IMPORTANT: Keep messages visible in stream & maintain ticker for 2-min private mode disappearance
+  useEffect(() => {
+    setVisibleMessages(messages);
+  }, [messages]);
+
+  useEffect(() => {
+    if (!privateMode) return;
+    setCurrentTime(Date.now());
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [privateMode]);
 
   const setupRealTimeConnection = () => {
     cleanupRealTimeConnection(); // Clean up existing routines first
@@ -299,6 +331,18 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
       }
     } catch (error) {
       console.error('Error checking block status:', error);
+    }
+  };
+
+  const checkIsBlockedBy = async () => {
+    try {
+      const response = await fetch(`/api/is-blocked-by?blockerId=${conversation.participant?._id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setIsBlockedBy(data.isBlockedBy || false);
+      }
+    } catch (error) {
+      console.error('Error checking if blocked by user:', error);
     }
   };
 
@@ -419,7 +463,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     if (e) e.preventDefault();
 
     const cleanMessage = newMessage.trim();
-    if (!cleanMessage || isSending) return;
+    if (!cleanMessage || isSending || isBlocked || isBlockedBy) return;
 
     setIsSending(true);
 
@@ -581,6 +625,76 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     }
   };
 
+  // ── Media Upload Handler via Cloudinary ───────────────────────
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || isUploadingMedia) return;
+
+    setIsUploadingMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('conversationId', conversation._id);
+
+      const res = await fetch('/api/personal-messages/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to upload media');
+      }
+
+      const data = await res.json();
+      const mediaUrl = data.url;
+      const mediaType = data.mediaType;
+      const fileName = data.fileName;
+
+      const replyToMessage = replyingTo;
+
+      const sendRes = await fetch('/api/personal-messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId: conversation._id,
+          content: mediaUrl,
+          type: mediaType,
+          replyTo: replyToMessage ? {
+            messageId: replyToMessage._id,
+            senderName: replyToMessage.sender.name,
+            content: replyToMessage.content
+          } : undefined,
+          metadata: {
+            mediaUrl,
+            mediaType,
+            fileName,
+            fileSize: data.fileSize,
+          },
+        }),
+      });
+
+      if (sendRes.ok) {
+        const sendData = await sendRes.json();
+        const sentMessage = sendData.message;
+        if (sentMessage) {
+          setMessages(prev => {
+            const exists = prev.some(m => m._id === sentMessage._id);
+            if (exists) return prev;
+            return [...prev, sentMessage];
+          });
+        }
+        if (replyingTo) cancelReply();
+      }
+    } catch (err: any) {
+      console.error('Error sending media:', err);
+      alert(err.message || 'Error uploading media file');
+    } finally {
+      setIsUploadingMedia(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -589,6 +703,19 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     const isCurrentUser = message.sender.email === currentUser?.email;
     const isSelected = selectedIds.has(message._id);
     const showContextMenu = contextMenuMsgId === message._id;
+
+    // Check if 2-minute timer has elapsed while Private Mode is ACTIVE
+    const msgTime = message.timestamp ? new Date(message.timestamp).getTime() : Date.now();
+    const isDisappeared = privateMode && (currentTime - msgTime >= 2 * 60 * 1000);
+
+    // Color of the bubble container background
+    const bubbleBgColor = isCurrentUser ? '#c7b793' : '#ffffff';
+    // Style applied when message text/media vanishes into bubble color in Private Mode
+    const disappearedTextStyle = isDisappeared ? { color: bubbleBgColor, userSelect: 'none' as const } : undefined;
+
+    // Determine media information if present
+    const mediaUrl = message.metadata?.mediaUrl || (['image', 'video', 'audio', 'file', 'media'].includes(message.type) ? message.content : null);
+    const mediaType = message.metadata?.mediaType || message.type;
 
     return (
       <div
@@ -602,7 +729,6 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
         }}
         onTouchStart={() => handleDoubleTap(message)}
         onDoubleClick={() => {
-          // Desktop double-click support
           if (!isCurrentUser) startReply(message);
         }}
       >
@@ -656,19 +782,19 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                     <div className="flex items-center space-x-1.5">
                       <CornerDownLeft className={cn(
                         "h-3 w-3",
-                        isCurrentUser ? "text-white/70" : "text-gray-400"
-                      )} />
+                        !isDisappeared && (isCurrentUser ? "text-white/70" : "text-gray-400")
+                      )} style={disappearedTextStyle} />
                       <p className={cn(
                         "text-xs",
-                        isCurrentUser ? "text-white/70" : "text-gray-500"
-                      )}>
-                        <span className="font-medium">{message.replyTo.senderName}</span>
+                        !isDisappeared && (isCurrentUser ? "text-white/70" : "text-gray-500")
+                      )} style={disappearedTextStyle}>
+                        <span className="font-medium" style={disappearedTextStyle}>{message.replyTo.senderName}</span>
                       </p>
                     </div>
                     <p className={cn(
                       "text-xs truncate mt-0.5 ml-4",
-                      isCurrentUser ? "text-white/60" : "text-gray-400"
-                    )}>
+                      !isDisappeared && (isCurrentUser ? "text-white/60" : "text-gray-400")
+                    )} style={disappearedTextStyle}>
                       {message.replyTo.content}
                     </p>
                   </div>
@@ -676,12 +802,51 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
 
                 {!isCurrentUser && (
                   <div className="mb-1.5 flex items-baseline justify-between gap-4">
-                    <p className="text-xs font-semibold text-[#a38c5b]">
+                    <p className="text-xs font-semibold" style={isDisappeared ? disappearedTextStyle : { color: '#a38c5b' }}>
                       {message.sender.name}
                     </p>
                   </div>
                 )}
 
+                {/* Media rendering logic */}
+                {mediaUrl && (
+                  isDisappeared ? (
+                    <div className="w-full h-24 rounded-xl transition-all duration-300 pointer-events-none select-none my-1" style={{ backgroundColor: bubbleBgColor }} />
+                  ) : (
+                    <div className="my-1.5 overflow-hidden rounded-xl">
+                      {mediaType === 'image' && (
+                        <img
+                          src={mediaUrl}
+                          alt="Media attachment"
+                          className="max-w-full max-h-72 rounded-xl object-cover shadow-sm cursor-pointer hover:opacity-95 transition-opacity"
+                          onClick={() => window.open(mediaUrl, '_blank')}
+                        />
+                      )}
+                      {mediaType === 'video' && (
+                        <video src={mediaUrl} controls className="max-w-full max-h-72 rounded-xl shadow-sm" />
+                      )}
+                      {mediaType === 'audio' && (
+                        <audio src={mediaUrl} controls className="max-w-full" />
+                      )}
+                      {mediaType === 'file' && (
+                        <a
+                          href={mediaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={cn(
+                            "flex items-center space-x-2 p-2.5 rounded-xl border transition-colors",
+                            isCurrentUser ? "bg-white/10 border-white/20 text-white" : "bg-gray-50 border-gray-200 text-gray-800"
+                          )}
+                        >
+                          <Paperclip className="h-4 w-4 flex-shrink-0" />
+                          <span className="text-xs underline truncate">{message.metadata?.fileName || 'Download attachment'}</span>
+                        </a>
+                      )}
+                    </div>
+                  )
+                )}
+
+                {/* Text Content */}
                 {editingMessageId === message._id ? (
                   <div className="space-y-2">
                     <Input
@@ -713,26 +878,32 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                     </div>
                   </div>
                 ) : (
-                  <p className={cn(
-                    'text-[13.5px] leading-relaxed break-words font-normal',
-                    isCurrentUser ? 'text-white' : 'text-gray-800'
-                  )}>
-                    {renderMessageContent(message.content)}
-                  </p>
+                  (!mediaUrl || (message.content && message.content !== mediaUrl)) && (
+                    <p
+                      className={cn(
+                        'text-[13.5px] leading-relaxed break-words font-normal transition-colors duration-200',
+                        !isDisappeared && (isCurrentUser ? 'text-white' : 'text-gray-800'),
+                        isDisappeared && 'select-none'
+                      )}
+                      style={disappearedTextStyle}
+                    >
+                      {renderMessageContent(message.content)}
+                    </p>
+                  )
                 )}
               </>
             )}
 
             <div className="flex items-center justify-end mt-1.5 space-x-1">
               {message.isEdited && (
-                <span className={cn('text-[10px] italic', isCurrentUser ? 'text-white/70' : 'text-gray-400')}>
+                <span className={cn('text-[10px] italic', !isDisappeared && (isCurrentUser ? 'text-white/70' : 'text-gray-400'))} style={disappearedTextStyle}>
                   edited
                 </span>
               )}
               <span className={cn(
                 'text-[10px]',
-                isCurrentUser ? 'text-white/85' : 'text-gray-400'
-              )}>
+                !isDisappeared && (isCurrentUser ? 'text-white/85' : 'text-gray-400')
+              )} style={disappearedTextStyle}>
                 {message.timestamp ? format(new Date(message.timestamp), 'h:mm a') : ''}
               </span>
               {!isCurrentUser && (
@@ -743,7 +914,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                   }}
                   className="text-gray-400 hover:text-[#c7b793] transition-colors"
                 >
-                  <Reply className="h-3 w-3" />
+                  <Reply className="h-3 w-3" style={disappearedTextStyle} />
                 </button>
               )}
             </div>
@@ -870,11 +1041,13 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
               }
             </h1>
             <p className="text-sm text-gray-500">
-              {isTyping
-                ? 'typing...'
-                : conversation.participant?.status === 'online'
-                  ? 'online'
-                  : 'offline'
+              {isBlocked || isBlockedBy
+                ? <span className="text-red-500 font-medium">Blocked</span>
+                : isTyping
+                  ? 'typing...'
+                  : conversation.participant?.status === 'online'
+                    ? 'online'
+                    : 'offline'
               }
             </p>
           </div>
@@ -947,21 +1120,14 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto bg-[#faf8f5] scroll-smooth relative">
-        {/* IMPORTANT: Private mode overlay to prevent screenshots */}
+        {/* IMPORTANT: Private mode banner informing the user of the 2-minute vanishing effect */}
         {privateMode && (
-          <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center" style={{ 
-            WebkitUserSelect: 'none',
-            userSelect: 'none',
-            WebkitTouchCallout: 'none'
-          }}>
-            <div className="bg-black/10 backdrop-blur-[1px] w-full h-full flex items-center justify-center">
-              <div className="bg-white/95 px-6 py-4 rounded-2xl shadow-lg border border-[#c7b793]/20">
-                <div className="flex items-center space-x-3">
-                  <Lock className="h-5 w-5 text-[#c7b793]" />
-                  <p className="text-sm font-medium text-gray-700">Private Mode Active</p>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Screenshots disabled</p>
-              </div>
+          <div className="sticky top-0 z-20 bg-[#c7b793]/15 border-b border-[#c7b793]/30 px-4 py-2.5 text-xs text-[#7a683e] flex items-center justify-between shadow-sm backdrop-blur-md">
+            <div className="flex items-center space-x-2">
+              <Lock className="h-4 w-4 text-[#c7b793] flex-shrink-0 animate-pulse" />
+              <p className="leading-snug">
+                <strong className="font-semibold text-[#66542c]">Private Mode Active:</strong> Text & media disappear 2 minutes after sending. De-activating restores everything immediately.
+              </p>
             </div>
           </div>
         )}
@@ -997,6 +1163,18 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
       {!selectMode && (
         <div className="bg-white border-t border-[#c7b793]/15 p-3 sm:p-4 shadow-lg flex-shrink-0">
           <div className="max-w-4xl mx-auto">
+            {/* IMPORTANT: Blocked state indicator */}
+            {(isBlocked || isBlockedBy) && (
+              <div className="mb-3 flex items-center justify-center bg-red-50 rounded-lg px-4 py-3 border border-red-200">
+                <Ban className="h-4 w-4 text-red-500 mr-2 flex-shrink-0" />
+                <p className="text-sm text-red-700 font-medium">
+                  {isBlocked
+                    ? `You have blocked ${conversation.participant?.name || conversation.participant?.email}. Messages cannot be sent.`
+                    : `You have been blocked by ${conversation.participant?.name || conversation.participant?.email}. Messages cannot be sent.`
+                  }
+                </p>
+              </div>
+            )}
             {/* IMPORTANT: Reply indicator */}
             {replyingTo && (
               <div className="mb-2 flex items-center justify-between bg-[#faf8f5] rounded-lg px-3 py-2 border border-[#c7b793]/20 transition-all duration-200 ease-in-out">
@@ -1061,12 +1239,18 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                     }
                   }}
                   placeholder={`Message ${conversation.participant?.name || conversation.participant?.email}...`}
-                  className="pl-4 pr-12 sm:pl-5 sm:pr-14 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#c7b793] focus:ring-2 focus:ring-[#c7b793]/10 transition-all duration-200 text-sm min-h-[44px] text-black resize-none"
+                  disabled={isBlocked || isBlockedBy}
+                  className={cn(
+                    "pl-4 pr-12 sm:pl-5 sm:pr-14 py-3.5 rounded-2xl border transition-all duration-200 text-sm min-h-[44px] text-black resize-none",
+                    (isBlocked || isBlockedBy)
+                      ? "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed"
+                      : "bg-gray-50 border-gray-200 focus:bg-white focus:border-[#c7b793] focus:ring-2 focus:ring-[#c7b793]/10"
+                  )}
                 />
                 <Button
                   type="submit"
-                  disabled={!newMessage.trim() || isSending}
-                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full p-0 transition-all duration-200 ${isSending
+                  disabled={!newMessage.trim() || isSending || isBlocked || isBlockedBy}
+                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full p-0 transition-all duration-200 ${isSending || isBlocked || isBlockedBy
                     ? 'bg-gray-100 text-gray-300'
                     : !newMessage.trim()
                       ? 'bg-gray-100 text-gray-300'
@@ -1105,6 +1289,28 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                   >
                     <CornerDownLeft className="w-5 h-5" />
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingMedia || isBlocked || isBlockedBy}
+                    className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
+                    title="Attach media (Image, Video, Audio, File)"
+                  >
+                    {isUploadingMedia ? (
+                      <div className="h-4 w-4 border-2 border-[#c7b793] border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Paperclip className="w-5 h-5" />
+                    )}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
+                  />
+
                   <div className="relative">
                     <button
                       type="button"
