@@ -692,6 +692,15 @@ function PersonalChatPageContent() {
             conversation={selectedConversation}
             currentUser={currentUser}
             onBack={() => setSelectedConversation(null)}
+            onConversationUpdate={({ conversationId, lastMessage, lastMessageAt }) => {
+              setConversations(prev =>
+                prev.map(c =>
+                  c._id === conversationId
+                    ? { ...c, lastMessage, lastMessageAt }
+                    : c
+                )
+              );
+            }}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-white to-[#faf8f5]">

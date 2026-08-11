@@ -4,6 +4,14 @@ import dbConnect from '@/lib/mongodb';
 import { Message, Conversation, PrivateUser } from '@/lib/models';
 import { chatEmitter } from '@/lib/chat-emitter';
 import { memoryCache } from '@/lib/cache';
+import { v2 as cloudinary } from 'cloudinary';
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
+});
 
 // Send a new personal message (supports text and media <2MB)
 // export async function POST(request: NextRequest) {
@@ -475,6 +483,46 @@ export async function DELETE(request: NextRequest) {
 
     if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
       return NextResponse.json({ error: 'Message IDs array is required' }, { status: 400 });
+    }
+
+    // Fetch messages before deleting to extract media info
+    const messagesToDelete = await Message.find({
+      _id: { $in: messageIds },
+      sender: user.id,
+    }).lean() as any[];
+
+    // Purge Cloudinary media for any media messages
+    const cloudinaryDeletions: Promise<any>[] = [];
+    for (const msg of messagesToDelete) {
+      const mediaUrl: string | undefined = msg.metadata?.mediaUrl ||
+        (['image', 'video', 'audio', 'file', 'media'].includes(msg.type) ? msg.content : undefined);
+      if (mediaUrl) {
+        // Extract public_id from Cloudinary URL
+        // Format: https://res.cloudinary.com/<cloud>/image/upload/v<ver>/<folder>/<publicId>.<ext>
+        try {
+          const urlParts = mediaUrl.split('/');
+          const uploadIndex = urlParts.indexOf('upload');
+          if (uploadIndex !== -1) {
+            // Everything after 'upload/v<version>/' is the public_id (without extension)
+            const afterUpload = urlParts.slice(uploadIndex + 2).join('/');
+            const publicId = afterUpload.replace(/\.[^/.]+$/, '');
+            const resourceType = msg.type === 'video' || msg.type === 'audio' ? 'video' :
+              msg.type === 'image' ? 'image' : 'raw';
+            cloudinaryDeletions.push(
+              cloudinary.uploader.destroy(publicId, { resource_type: resourceType }).catch((e: any) =>
+                console.error('Cloudinary delete error:', publicId, e.message)
+              )
+            );
+          }
+        } catch (e) {
+          console.error('Failed to parse Cloudinary URL:', mediaUrl);
+        }
+      }
+    }
+
+    // Delete from Cloudinary in parallel
+    if (cloudinaryDeletions.length > 0) {
+      await Promise.allSettled(cloudinaryDeletions);
     }
 
     // Only delete messages where sender is the current user

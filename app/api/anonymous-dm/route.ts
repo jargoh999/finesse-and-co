@@ -15,6 +15,10 @@ const AnonymousDMSchema = new mongoose.Schema({
   // IMPORTANT: Add fields for system messages (Q&A notifications)
   isSystemMessage: { type: Boolean, default: false },
   systemData: { type: Object }, // For Q&A links, etc.
+  // Media attachment fields
+  mediaUrl: { type: String },
+  mediaType: { type: String }, // 'image' | 'video' | 'audio' | 'file'
+  fileName: { type: String },
 });
 
 // Indexes to speed up queries and prevent full collection scans on polling
@@ -141,10 +145,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { receiverId, content } = await req.json();
+    const { receiverId, content, mediaUrl, mediaType, fileName } = await req.json();
 
-    if (!receiverId || !content || content.trim().length === 0) {
-      return NextResponse.json({ error: 'Receiver ID and content are required' }, { status: 400 });
+    if (!receiverId || (!content && !mediaUrl)) {
+      return NextResponse.json({ error: 'Receiver ID and content or media are required' }, { status: 400 });
+    }
+    if (content && content.trim().length === 0 && !mediaUrl) {
+      return NextResponse.json({ error: 'Content cannot be empty' }, { status: 400 });
     }
 
     await dbConnect();
@@ -164,7 +171,10 @@ export async function POST(req: NextRequest) {
     const newDM = await AnonymousDM.create({
       senderId: user.id,
       receiverId,
-      content: content.trim(),
+      content: content?.trim() || mediaUrl || '',
+      mediaUrl: mediaUrl || undefined,
+      mediaType: mediaType || undefined,
+      fileName: fileName || undefined,
     });
 
     // Update in-memory timestamps for both user and receiver to let pollers know immediately
@@ -176,5 +186,76 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Error sending anonymous DM:', error);
     return NextResponse.json({ error: 'Failed to send DM' }, { status: 500 });
+  }
+}
+
+// DELETE - Delete anonymous DMs by IDs (only sender can delete their own)
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { messageIds } = await req.json();
+    if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+      return NextResponse.json({ error: 'Message IDs array is required' }, { status: 400 });
+    }
+
+    await dbConnect();
+
+    // Fetch messages before deleting (only sender's own messages)
+    const toDelete = await AnonymousDM.find({
+      _id: { $in: messageIds },
+      senderId: user.id,
+    }).lean() as any[];
+
+    // Purge Cloudinary media
+    if (toDelete.length > 0) {
+      const { v2: cloudinary } = await import('cloudinary');
+      cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+        secure: true,
+      });
+
+      const cloudinaryDeletions: Promise<any>[] = [];
+      for (const msg of toDelete) {
+        const mediaUrl: string | undefined = msg.mediaUrl;
+        if (mediaUrl) {
+          try {
+            const urlParts = mediaUrl.split('/');
+            const uploadIndex = urlParts.indexOf('upload');
+            if (uploadIndex !== -1) {
+              const afterUpload = urlParts.slice(uploadIndex + 2).join('/');
+              const publicId = afterUpload.replace(/\.[^/.]+$/, '');
+              const resourceType = msg.mediaType === 'video' || msg.mediaType === 'audio' ? 'video' :
+                msg.mediaType === 'image' ? 'image' : 'raw';
+              cloudinaryDeletions.push(
+                cloudinary.uploader.destroy(publicId, { resource_type: resourceType }).catch((e: any) =>
+                  console.error('Cloudinary delete error:', publicId, e.message)
+                )
+              );
+            }
+          } catch (e) {
+            console.error('Failed to parse Cloudinary URL:', mediaUrl);
+          }
+        }
+      }
+      if (cloudinaryDeletions.length > 0) {
+        await Promise.allSettled(cloudinaryDeletions);
+      }
+    }
+
+    const result = await AnonymousDM.deleteMany({
+      _id: { $in: messageIds },
+      senderId: user.id,
+    });
+
+    return NextResponse.json({ success: true, deleted: result.deletedCount });
+  } catch (error) {
+    console.error('Error deleting anonymous DMs:', error);
+    return NextResponse.json({ error: 'Failed to delete DMs' }, { status: 500 });
   }
 }

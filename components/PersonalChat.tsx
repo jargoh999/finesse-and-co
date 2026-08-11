@@ -86,9 +86,10 @@ interface PersonalChatProps {
   conversation: Conversation;
   currentUser: any;
   onBack: () => void;
+  onConversationUpdate?: (update: { conversationId: string; lastMessage: any; lastMessageAt: Date }) => void;
 }
 
-export function PersonalChat({ conversation, currentUser, onBack }: PersonalChatProps) {
+export function PersonalChat({ conversation, currentUser, onBack, onConversationUpdate }: PersonalChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -252,6 +253,12 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
               return [...prev, data.message];
             });
 
+            onConversationUpdate?.({
+              conversationId: conversation._id,
+              lastMessage: data.message,
+              lastMessageAt: new Date(data.message.timestamp || Date.now())
+            });
+
             if (pendingMessageIdRef.current && data.message._id === pendingMessageIdRef.current) {
               setNewMessage('');
               stopTyping();
@@ -365,7 +372,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
     }
   };
 
-  const renderMessageContent = (content: string) => {
+  const renderMessageContent = (content: string, isDisappeared: boolean = false) => {
     // First, parse markdown-style links [text](url) and render as clickable links
     const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
     const parts = [];
@@ -382,10 +389,12 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
       parts.push(
         <a
           key={match.index}
-          href={match[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-white/50 hover:text-white/50 underline"
+          href={isDisappeared ? undefined : match[2]}
+          target={isDisappeared ? undefined : "_blank"}
+          rel={isDisappeared ? undefined : "noopener noreferrer"}
+          className={cn(
+            isDisappeared ? "opacity-0 pointer-events-none select-none text-transparent" : "text-white/50 hover:text-white/50 underline"
+          )}
         >
           {match[1]}
         </a>
@@ -417,10 +426,12 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
         urlParts.push(
           <a
             key={urlMatch.index}
-            href={urlMatch[1]}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500 hover:text-blue-600 underline"
+            href={isDisappeared ? undefined : urlMatch[1]}
+            target={isDisappeared ? undefined : "_blank"}
+            rel={isDisappeared ? undefined : "noopener noreferrer"}
+            className={cn(
+              isDisappeared ? "opacity-0 pointer-events-none select-none text-transparent" : "text-blue-500 hover:text-blue-600 underline"
+            )}
           >
             {urlMatch[1]}
           </a>
@@ -505,6 +516,11 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
           if (sentMessage.timestamp) {
             lastTimestampRef.current = new Date(sentMessage.timestamp).toISOString();
           }
+          onConversationUpdate?.({
+            conversationId: conversation._id,
+            lastMessage: sentMessage,
+            lastMessageAt: new Date(sentMessage.timestamp || Date.now())
+          });
         }
 
         setNewMessage('');
@@ -682,6 +698,11 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
             const exists = prev.some(m => m._id === sentMessage._id);
             if (exists) return prev;
             return [...prev, sentMessage];
+          });
+          onConversationUpdate?.({
+            conversationId: conversation._id,
+            lastMessage: sentMessage,
+            lastMessageAt: new Date(sentMessage.timestamp || Date.now())
           });
         }
         if (replyingTo) cancelReply();
@@ -887,7 +908,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                       )}
                       style={disappearedTextStyle}
                     >
-                      {renderMessageContent(message.content)}
+                      {renderMessageContent(message.content, isDisappeared)}
                     </p>
                   )
                 )}
@@ -932,7 +953,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
             </div>
           </div>
 
-          {isCurrentUser && !selectMode && message.type === 'text' && editingMessageId !== message._id && (
+          {isCurrentUser && !selectMode && message.type !== 'system' && editingMessageId !== message._id && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -944,7 +965,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
             </button>
           )}
 
-          {!isCurrentUser && !selectMode && message.type === 'text' && editingMessageId !== message._id && (
+          {!isCurrentUser && !selectMode && message.type !== 'system' && editingMessageId !== message._id && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -973,7 +994,7 @@ export function PersonalChat({ conversation, currentUser, onBack }: PersonalChat
                   <span>Reply</span>
                 </button>
               )}
-              {isCurrentUser && (
+              {isCurrentUser && message.type === 'text' && (
                 <button
                   onClick={() => startEdit(message)}
                   className="w-full flex items-center space-x-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#faf8f5] transition-colors"

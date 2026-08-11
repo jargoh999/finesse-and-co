@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth-helper';
 import dbConnect from '@/lib/mongodb';
 import { Conversation, Message, PrivateUser } from '@/lib/models';
+import mongoose from 'mongoose';
 
 // Create or get existing conversation
 export async function POST(request: NextRequest) {
@@ -198,9 +199,23 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Check block status for all participant IDs in one query
+    const participantIds = validConvs.map((conv: any) => conv.participant?._id).filter(Boolean);
+    const Block = mongoose.models.Block || mongoose.model('Block', new mongoose.Schema({
+      blockerId: { type: String, required: true },
+      blockedUserId: { type: String, required: true },
+    }));
+    const blockedByMe = await Block.find({ blockerId: user.id, blockedUserId: { $in: participantIds.map(String) } }).lean();
+    const blockedByMeSet = new Set(blockedByMe.map((b: any) => b.blockedUserId));
+
+    const conversationsWithBlock = conversationsWithMessages.map((conv: any) => ({
+      ...conv,
+      isBlocked: blockedByMeSet.has(conv.participant?._id?.toString()),
+    }));
+
     return NextResponse.json({
       success: true,
-      conversations: conversationsWithMessages
+      conversations: conversationsWithBlock
     });
 
   } catch (error) {
